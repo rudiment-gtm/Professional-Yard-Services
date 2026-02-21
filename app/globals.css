@@ -1,0 +1,114 @@
+@tailwind base;
+@tailwind components;
+@tailwind utilities;
+
+/* Import Google Fonts */
+@import url('https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700;800&display=swap');
+
+/* ── Scrollbar styles ─────────────────────────────────────────────────────── */
+.scrollbar-thin {
+  scrollbar-width: thin;
+  scrollbar-color: #1e4228 transparent;
+}
+
+.scrollbar-thin::-webkit-scrollbar {
+  width: 4px;
+}
+
+.scrollbar-thin::-webkit-scrollbar-track {
+  background: transparent;
+}
+
+.scrollbar-thin::-webkit-scrollbar-thumb {
+  background-color: #1e4228;
+  border-radius: 9999px;
+}
+
+.scrollbar-none {
+  scrollbar-width: none;
+}
+
+.scrollbar-none::-webkit-scrollbar {
+  display: none;
+}
+
+/* ── Leaflet dark popup overrides ─────────────────────────────────────────── */
+.pys-popup .leaflet-popup-content-wrapper {
+  background: transparent !important;
+  border: none !important;
+  box-shadow: none !important;
+  padding: 0 !important;
+  border-radius: 10px !important;
+}
+
+.pys-popup .leaflet-popup-content {
+  margin: 0 !important;
+  line-height: 1 !important;
+}
+
+.pys-popup .leaflet-popup-tip-container {
+  display: none !important;
+}
+
+/* ── Leaflet zoom control dark theme ──────────────────────────────────────── */
+.leaflet-control-zoom a {
+  background-color: #0e2415 !important;
+  color: #e4f0e8 !important;
+  border-color: #1e4228 !important;
+}
+
+.leaflet-control-zoom a:hover {
+  background-color: #132b1a !important;
+  color: #ffffff !important;
+}
+
+/* ── Leaflet attribution dark theme ──────────────────────────────────────── */
+.leaflet-control-attribution {
+  background-color: rgba(10, 26, 14, 0.8) !important;
+  color: #4a6e54 !important;
+  font-size: 10px !important;
+}
+
+.leaflet-control-attribution a {
+  color: #5cb56a !important;
+}
+
+/* ── Map container fill ───────────────────────────────────────────────────── */
+.leaflet-container {
+  background-color: #0a1a0e !important;
+  font-family: 'Inter', system-ui, sans-serif !important;
+}
+
+/* ── Global resets ────────────────────────────────────────────────────────── */
+*,
+*::before,
+*::after {
+  box-sizing: border-box;
+}
+
+html,
+body {
+  margin: 0;
+  padding: 0;
+  height: 100%;
+  overflow: hidden;
+}
+
+/* ── Animations ───────────────────────────────────────────────────────────── */
+@keyframes fadeIn {
+  from { opacity: 0; transform: translateX(8px); }
+  to   { opacity: 1; transform: translateX(0); }
+}
+
+@keyframes slideUp {
+  from { opacity: 0; transform: translateY(16px); }
+  to   { opacity: 1; transform: translateY(0); }
+}
+
+.animate-fade-in {
+  animation: fadeIn 0.2s ease-out forwards;
+}
+
+.animate-slide-up {
+  animation: slideUp 0.25s ease-out forwards;
+}
