@@ -11,6 +11,7 @@ import {
   addQuote,
   updateQuote,
   deleteQuote,
+  saveCustomers,
   resetToSeedData,
 } from '@/lib/storage';
 import Header from './Header';
@@ -20,6 +21,7 @@ import CustomerMap from './CustomerMap';
 import CustomerDetail from './CustomerDetail';
 import AddCustomerModal from './AddCustomerModal';
 import AddQuoteModal from './AddQuoteModal';
+import CsvImportModal from './CsvImportModal';
 
 export default function Dashboard() {
   const [customers, setCustomers] = useState<Customer[]>([]);
@@ -32,6 +34,7 @@ export default function Dashboard() {
   const [showAddCustomer, setShowAddCustomer] = useState(false);
   const [editingCustomer, setEditingCustomer] = useState<Customer | null>(null);
   const [showAddQuote, setShowAddQuote] = useState(false);
+  const [showCsvImport, setShowCsvImport] = useState(false);
 
   // Load from localStorage on mount
   useEffect(() => {
@@ -67,6 +70,16 @@ export default function Dashboard() {
   const handleEditCustomer = useCallback((customer: Customer) => {
     setEditingCustomer(customer);
     setShowAddCustomer(true);
+  }, []);
+
+  // ── CSV import ──────────────────────────────────────────────────────────────
+
+  const handleCsvImport = useCallback((imported: Customer[]) => {
+    // Merge with existing list and persist; modal stays open to show Done step
+    const current = getCustomers();
+    const merged = [...current, ...imported];
+    saveCustomers(merged);
+    setCustomers(merged);
   }, []);
 
   // ── Quote actions ───────────────────────────────────────────────────────────
@@ -126,6 +139,7 @@ export default function Dashboard() {
             setEditingCustomer(null);
             setShowAddCustomer(true);
           }}
+          onImportCsv={() => setShowCsvImport(true)}
         />
 
         {/* Center: Map */}
@@ -146,10 +160,10 @@ export default function Dashboard() {
               <div className="space-y-1">
                 {(
                   [
-                    { service: 'mowing', color: '#FDD835', label: 'Mowing' },
-                    { service: 'fertilizer', color: '#4CAF50', label: 'Fertilizer' },
+                    { service: 'mowing',      color: '#FDD835', label: 'Mowing' },
+                    { service: 'fertilizer',  color: '#4CAF50', label: 'Fertilizer' },
                     { service: 'pestControl', color: '#FF6F00', label: 'Pest Control' },
-                    { service: 'sprinklers', color: '#1E88E5', label: 'Sprinklers' },
+                    { service: 'sprinklers',  color: '#1E88E5', label: 'Sprinklers' },
                     { service: 'fullService', color: '#9C27B0', label: 'Full Service' },
                   ] as const
                 ).map((item) => (
@@ -165,14 +179,20 @@ export default function Dashboard() {
             </div>
           </div>
 
-          {/* Map overlay: selected customer name */}
+          {/* Map overlay: selected customer chip */}
           {selectedCustomer && (
             <div className="absolute top-3 right-3 z-10 pointer-events-none">
               <div
                 className="bg-brand-dark/90 backdrop-blur-sm border rounded-xl px-3 py-2 shadow-panel"
                 style={{
                   borderColor: `${
-                    { mowing: '#FDD835', fertilizer: '#4CAF50', pestControl: '#FF6F00', sprinklers: '#1E88E5', fullService: '#9C27B0' }[selectedCustomer.service]
+                    {
+                      mowing:      '#FDD835',
+                      fertilizer:  '#4CAF50',
+                      pestControl: '#FF6F00',
+                      sprinklers:  '#1E88E5',
+                      fullService: '#9C27B0',
+                    }[selectedCustomer.service]
                   }50`,
                 }}
               >
@@ -181,10 +201,10 @@ export default function Dashboard() {
                     className="w-2.5 h-2.5 rounded-full"
                     style={{
                       backgroundColor: {
-                        mowing: '#FDD835',
-                        fertilizer: '#4CAF50',
+                        mowing:      '#FDD835',
+                        fertilizer:  '#4CAF50',
                         pestControl: '#FF6F00',
-                        sprinklers: '#1E88E5',
+                        sprinklers:  '#1E88E5',
                         fullService: '#9C27B0',
                       }[selectedCustomer.service],
                     }}
@@ -233,6 +253,13 @@ export default function Dashboard() {
           customer={selectedCustomer}
           onSave={handleSaveQuote}
           onClose={() => setShowAddQuote(false)}
+        />
+      )}
+
+      {showCsvImport && (
+        <CsvImportModal
+          onImport={handleCsvImport}
+          onClose={() => setShowCsvImport(false)}
         />
       )}
     </div>

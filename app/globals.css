@@ -105,6 +105,16 @@ body {
   to   { opacity: 1; transform: translateY(0); }
 }
 
+/* Pulsing ring on selected map marker — referenced by MapView.tsx divIcon */
+@keyframes pys-pulse {
+  0%   { transform: scale(1);   opacity: 0.65; }
+  100% { transform: scale(2.8); opacity: 0; }
+}
+
+.pys-pulse-ring {
+  animation: pys-pulse 1.6s ease-out infinite;
+}
+
 .animate-fade-in {
   animation: fadeIn 0.2s ease-out forwards;
 }

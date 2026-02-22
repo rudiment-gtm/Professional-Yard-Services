@@ -1,6 +1,6 @@
 'use client';
 
-import { Plus, ChevronDown } from 'lucide-react';
+import { Plus, Upload } from 'lucide-react';
 import { Customer, Quote, ServiceType } from '@/lib/types';
 import { SERVICE_CONFIG } from '@/lib/constants';
 import CustomerCard from './CustomerCard';
@@ -13,6 +13,7 @@ interface CustomerPanelProps {
   searchQuery: string;
   onSelectCustomer: (id: string) => void;
   onAddCustomer: () => void;
+  onImportCsv: () => void;
 }
 
 export default function CustomerPanel({
@@ -23,6 +24,7 @@ export default function CustomerPanel({
   searchQuery,
   onSelectCustomer,
   onAddCustomer,
+  onImportCsv,
 }: CustomerPanelProps) {
   // Filter customers
   const filtered = customers.filter((c) => {
@@ -59,13 +61,23 @@ export default function CustomerPanel({
             {filtered.length} of {customers.length} shown
           </p>
         </div>
-        <button
-          onClick={onAddCustomer}
-          className="flex items-center gap-1.5 px-2.5 py-1.5 bg-brand-primary hover:bg-brand-primaryHover text-white text-xs font-medium rounded-lg transition-colors shadow-glow"
-        >
-          <Plus className="w-3.5 h-3.5" />
-          Add
-        </button>
+        <div className="flex items-center gap-1.5">
+          <button
+            onClick={onImportCsv}
+            title="Import customers from CSV"
+            className="flex items-center gap-1 px-2 py-1.5 text-brand-muted hover:text-brand-text border border-brand-border hover:border-brand-borderLight text-xs font-medium rounded-lg transition-colors"
+          >
+            <Upload className="w-3.5 h-3.5" />
+            CSV
+          </button>
+          <button
+            onClick={onAddCustomer}
+            className="flex items-center gap-1.5 px-2.5 py-1.5 bg-brand-primary hover:bg-brand-primaryHover text-white text-xs font-medium rounded-lg transition-colors shadow-glow"
+          >
+            <Plus className="w-3.5 h-3.5" />
+            Add
+          </button>
+        </div>
       </div>
 
       {/* Customer list */}
