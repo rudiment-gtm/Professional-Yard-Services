@@ -1,0 +1,14 @@
+project_id = "vyewakyciuhlrgzmxkwk"
+
+[auth]
+site_url = "REPLACE_WITH_DEPLOYED_URL"
+
+[auth.email]
+enable_confirmations = true
+
+[auth.email.template.confirmation]
+subject = "Confirm your ProYard Sales Map account"
+content_path = "./supabase/templates/confirmation.html"
+
+[functions.get-mapbox-token]
+verify_jwt = false

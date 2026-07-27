@@ -1,0 +1,472 @@
+import { create } from 'zustand';
+import { Account, AccountStatus, ServiceType, ALL_SERVICE_TYPES } from '@/types/account';
+import type { AroundMeResult } from '@/lib/aroundMeSearch';
+import type { ProspectCategory } from '@/types/account';
+import { FilterCondition, FilterField, FilterGroup, FIELD_META, defaultValueFor } from '@/types/filters';
+import { evaluateFilters } from '@/lib/filterEvaluator';
+
+const uid = () => (typeof crypto !== 'undefined' && 'randomUUID' in crypto
+  ? crypto.randomUUID()
+  : Math.random().toString(36).slice(2));
+
+const makeCondition = (field: FilterField = 'status'): FilterCondition => {
+  const meta = FIELD_META[field];
+  return {
+    id: uid(),
+    field,
+    operator: meta.defaultOperator,
+    value: defaultValueFor(field, meta.defaultOperator),
+  };
+};
+
+const makeGroup = (): FilterGroup => ({ id: uid(), conditions: [makeCondition()] });
+
+export type SearchOrigin =
+  | { kind: 'user' }
+  | { kind: 'account'; accountId: string }
+  | { kind: 'mapCenter' };
+
+export type RouteStop =
+  | { kind: 'account'; id: string }
+  | {
+      kind: 'aroundMe';
+      id: string; // `am:${result.id}`
+      name: string;
+      address: string;
+      latitude: number;
+      longitude: number;
+      prospectCategory: ProspectCategory;
+      category: string;
+    };
+
+const aroundMeStopId = (resultId: string) => `am:${resultId}`;
+
+// Quick-filter toggles shown as pills in the sidebar — one per status/service value.
+export interface StatusFilterState {
+  lead: boolean;
+  active: boolean;
+  canceled: boolean;
+  new_customer: boolean;
+}
+
+export interface ServiceFilterState {
+  mowing: boolean;
+  fertilizer: boolean;
+  pestControl: boolean;
+  sprinklers: boolean;
+  fullService: boolean;
+}
+
+interface AppState {
+  // Accounts data (comes from useAccounts hook, kept here for UI convenience)
+  accounts: Account[];
+  selectedAccount: Account | null;
+
+  // Quick-filter state (simple pill toggles, separate from the advanced builder)
+  statusFilters: StatusFilterState;
+  serviceFilters: ServiceFilterState;
+
+  // Advanced filter builder
+  advancedFilters: FilterGroup[];
+  /** True once the user's persisted filters have been loaded from the server. Writes are gated on this. */
+  filtersHydrated: boolean;
+
+  // List-view-only advanced filter builder (ephemeral, not persisted)
+  listAdvancedFilters: FilterGroup[];
+
+  // Route planning
+  isRouteModeActive: boolean;
+  routeStops: RouteStop[];
+  /** Derived: just the account-kind stop IDs, in order. Kept in sync on every routeStops change. */
+  selectedAccountsForRoute: string[];
+
+  // UI state
+  isSidebarOpen: boolean;
+  isDrawerOpen: boolean;
+
+  // Map state
+  mapCenter: [number, number];
+  mapZoom: number;
+
+  // User location
+  userLocation: [number, number] | null;
+
+  // Around Me search
+  aroundMeResults: AroundMeResult[];
+  isAroundMeOpen: boolean;
+  aroundMePhrase: string;
+  aroundMeOrigin: SearchOrigin | null;
+  aroundMeOriginLabel: string;
+  aroundMeCategories: ProspectCategory[];
+
+  // Actions
+  setSelectedAccount: (account: Account | null) => void;
+  setAroundMeResults: (results: AroundMeResult[], phrase: string, originLabel: string, categories: ProspectCategory[]) => void;
+  clearAroundMeResults: () => void;
+  setAroundMeOpen: (open: boolean) => void;
+  setAroundMeOrigin: (origin: SearchOrigin | null) => void;
+  openAroundMeWithOrigin: (origin: SearchOrigin | null) => void;
+  toggleStatusFilter: (filter: keyof StatusFilterState) => void;
+  setAllStatusFilters: (value: boolean) => void;
+  toggleServiceFilter: (service: keyof ServiceFilterState) => void;
+  setAllServiceFilters: (value: boolean) => void;
+  addFilterGroup: () => void;
+  duplicateFilterGroup: (groupId: string) => void;
+  removeFilterGroup: (groupId: string) => void;
+  addFilterCondition: (groupId: string) => void;
+  updateFilterCondition: (groupId: string, condId: string, patch: Partial<FilterCondition>) => void;
+  removeFilterCondition: (groupId: string, condId: string) => void;
+  clearAdvancedFilters: () => void;
+  setAdvancedFilters: (groups: FilterGroup[]) => void;
+  setFiltersHydrated: (v: boolean) => void;
+
+  // List-scoped variants
+  addListFilterGroup: () => void;
+  duplicateListFilterGroup: (groupId: string) => void;
+  removeListFilterGroup: (groupId: string) => void;
+  addListFilterCondition: (groupId: string) => void;
+  updateListFilterCondition: (groupId: string, condId: string, patch: Partial<FilterCondition>) => void;
+  removeListFilterCondition: (groupId: string, condId: string) => void;
+  clearListAdvancedFilters: () => void;
+  setListAdvancedFilters: (groups: FilterGroup[]) => void;
+
+  toggleRouteMode: () => void;
+  toggleAccountForRoute: (accountId: string) => void;
+  toggleAroundMeForRoute: (result: AroundMeResult, prospectCategory?: ProspectCategory) => void;
+  isStopInRoute: (stopId: string) => boolean;
+  reorderRouteStops: (fromIndex: number, toIndex: number) => void;
+  clearRouteSelection: () => void;
+  loadRouteFromSnapshot: (stops: RouteStop[]) => void;
+  loadedSavedRouteId: string | null;
+  setLoadedSavedRouteId: (id: string | null) => void;
+  toggleSidebar: () => void;
+  setDrawerOpen: (open: boolean) => void;
+  setMapView: (center: [number, number], zoom: number) => void;
+  updateAccountStatus: (accountId: string, status: AccountStatus) => void;
+  logVisit: (accountId: string, notes?: string) => void;
+  setAccounts: (accounts: Account[]) => void;
+  setUserLocation: (location: [number, number] | null) => void;
+}
+
+const deriveAccountIds = (stops: RouteStop[]) =>
+  stops.filter((s): s is Extract<RouteStop, { kind: 'account' }> => s.kind === 'account').map((s) => s.id);
+
+export const useAppStore = create<AppState>((set, get) => ({
+  // Initial state - empty, loaded from database via useAccounts hook
+  accounts: [],
+  selectedAccount: null,
+
+  // Filters start as false - will be updated when accounts are loaded
+  statusFilters: {
+    lead: false,
+    active: false,
+    canceled: false,
+    new_customer: false,
+  },
+
+  serviceFilters: {
+    mowing: false,
+    fertilizer: false,
+    pestControl: false,
+    sprinklers: false,
+    fullService: false,
+  },
+
+  advancedFilters: [],
+  filtersHydrated: false,
+  listAdvancedFilters: [],
+
+  isRouteModeActive: false,
+  routeStops: [],
+  selectedAccountsForRoute: [],
+
+  isSidebarOpen: true,
+  isDrawerOpen: false,
+
+  // Default map center — overridden once accounts/user location load
+  mapCenter: [-97.743057, 30.267153],
+  mapZoom: 11,
+
+  // User location starts as null
+  userLocation: null,
+
+  // Around Me defaults
+  aroundMeResults: [],
+  isAroundMeOpen: false,
+  aroundMePhrase: '',
+  aroundMeOrigin: null,
+  aroundMeOriginLabel: 'your location',
+  aroundMeCategories: [],
+
+  // Actions
+  setSelectedAccount: (account) => set({
+    selectedAccount: account,
+    isDrawerOpen: account !== null
+  }),
+
+  setAroundMeResults: (results, phrase, originLabel, categories) => set({ aroundMeResults: results, aroundMePhrase: phrase, aroundMeOriginLabel: originLabel, aroundMeCategories: categories }),
+  clearAroundMeResults: () => set({ aroundMeResults: [], aroundMePhrase: '', aroundMeCategories: [] }),
+  setAroundMeOpen: (open) => set({ isAroundMeOpen: open }),
+  setAroundMeOrigin: (origin) => set({ aroundMeOrigin: origin }),
+  openAroundMeWithOrigin: (origin) => set({ aroundMeOrigin: origin, isAroundMeOpen: true }),
+
+  toggleStatusFilter: (filter) => set((state) => ({
+    statusFilters: {
+      ...state.statusFilters,
+      [filter]: !state.statusFilters[filter],
+    },
+  })),
+
+  setAllStatusFilters: (value) => set({
+    statusFilters: {
+      lead: value,
+      active: value,
+      canceled: value,
+      new_customer: value,
+    },
+  }),
+
+  toggleServiceFilter: (service) => set((state) => ({
+    serviceFilters: {
+      ...state.serviceFilters,
+      [service]: !state.serviceFilters[service],
+    },
+  })),
+
+  setAllServiceFilters: (value) => set({
+    serviceFilters: {
+      mowing: value,
+      fertilizer: value,
+      pestControl: value,
+      sprinklers: value,
+      fullService: value,
+    },
+  }),
+
+  addFilterGroup: () => set((state) => ({ advancedFilters: [...state.advancedFilters, makeGroup()] })),
+  duplicateFilterGroup: (groupId) => set((state) => {
+    const g = state.advancedFilters.find((x) => x.id === groupId);
+    if (!g) return {};
+    const clone: FilterGroup = {
+      id: uid(),
+      conditions: g.conditions.map((c) => ({ ...c, id: uid() })),
+    };
+    const idx = state.advancedFilters.findIndex((x) => x.id === groupId);
+    const next = [...state.advancedFilters];
+    next.splice(idx + 1, 0, clone);
+    return { advancedFilters: next };
+  }),
+  removeFilterGroup: (groupId) => set((state) => ({
+    advancedFilters: state.advancedFilters.filter((g) => g.id !== groupId),
+  })),
+  addFilterCondition: (groupId) => set((state) => ({
+    advancedFilters: state.advancedFilters.map((g) =>
+      g.id === groupId ? { ...g, conditions: [...g.conditions, makeCondition()] } : g
+    ),
+  })),
+  updateFilterCondition: (groupId, condId, patch) => set((state) => ({
+    advancedFilters: state.advancedFilters.map((g) =>
+      g.id !== groupId ? g : {
+        ...g,
+        conditions: g.conditions.map((c) => (c.id === condId ? { ...c, ...patch } : c)),
+      }
+    ),
+  })),
+  removeFilterCondition: (groupId, condId) => set((state) => ({
+    advancedFilters: state.advancedFilters.map((g) =>
+      g.id !== groupId ? g : { ...g, conditions: g.conditions.filter((c) => c.id !== condId) }
+    ).filter((g) => g.conditions.length > 0),
+  })),
+  clearAdvancedFilters: () => set({ advancedFilters: [] }),
+  setAdvancedFilters: (groups) => set({ advancedFilters: groups }),
+  setFiltersHydrated: (v) => set({ filtersHydrated: v }),
+
+  addListFilterGroup: () => set((state) => ({ listAdvancedFilters: [...state.listAdvancedFilters, makeGroup()] })),
+  duplicateListFilterGroup: (groupId) => set((state) => {
+    const g = state.listAdvancedFilters.find((x) => x.id === groupId);
+    if (!g) return {};
+    const clone: FilterGroup = {
+      id: uid(),
+      conditions: g.conditions.map((c) => ({ ...c, id: uid() })),
+    };
+    const idx = state.listAdvancedFilters.findIndex((x) => x.id === groupId);
+    const next = [...state.listAdvancedFilters];
+    next.splice(idx + 1, 0, clone);
+    return { listAdvancedFilters: next };
+  }),
+  removeListFilterGroup: (groupId) => set((state) => ({
+    listAdvancedFilters: state.listAdvancedFilters.filter((g) => g.id !== groupId),
+  })),
+  addListFilterCondition: (groupId) => set((state) => ({
+    listAdvancedFilters: state.listAdvancedFilters.map((g) =>
+      g.id === groupId ? { ...g, conditions: [...g.conditions, makeCondition()] } : g
+    ),
+  })),
+  updateListFilterCondition: (groupId, condId, patch) => set((state) => ({
+    listAdvancedFilters: state.listAdvancedFilters.map((g) =>
+      g.id !== groupId ? g : {
+        ...g,
+        conditions: g.conditions.map((c) => (c.id === condId ? { ...c, ...patch } : c)),
+      }
+    ),
+  })),
+  removeListFilterCondition: (groupId, condId) => set((state) => ({
+    listAdvancedFilters: state.listAdvancedFilters.map((g) =>
+      g.id !== groupId ? g : { ...g, conditions: g.conditions.filter((c) => c.id !== condId) }
+    ).filter((g) => g.conditions.length > 0),
+  })),
+  clearListAdvancedFilters: () => set({ listAdvancedFilters: [] }),
+  setListAdvancedFilters: (groups) => set({ listAdvancedFilters: groups }),
+
+  toggleRouteMode: () => set((state) => {
+    const turningOff = state.isRouteModeActive;
+    return {
+      isRouteModeActive: !state.isRouteModeActive,
+      routeStops: turningOff ? [] : state.routeStops,
+      selectedAccountsForRoute: turningOff ? [] : state.selectedAccountsForRoute,
+      loadedSavedRouteId: turningOff ? null : state.loadedSavedRouteId,
+    };
+  }),
+
+  toggleAccountForRoute: (accountId) => set((state) => {
+    const exists = state.routeStops.some((s) => s.kind === 'account' && s.id === accountId);
+    const nextStops: RouteStop[] = exists
+      ? state.routeStops.filter((s) => !(s.kind === 'account' && s.id === accountId))
+      : [...state.routeStops, { kind: 'account', id: accountId }];
+    return {
+      routeStops: nextStops,
+      selectedAccountsForRoute: deriveAccountIds(nextStops),
+    };
+  }),
+
+  toggleAroundMeForRoute: (result, prospectCategory) => set((state) => {
+    const stopId = aroundMeStopId(result.id);
+    const exists = state.routeStops.some((s) => s.id === stopId);
+    const nextStops: RouteStop[] = exists
+      ? state.routeStops.filter((s) => s.id !== stopId)
+      : [
+          ...state.routeStops,
+          {
+            kind: 'aroundMe',
+            id: stopId,
+            name: result.name,
+            address: result.address,
+            latitude: result.latitude,
+            longitude: result.longitude,
+            prospectCategory: prospectCategory || result.prospectCategory,
+            category: result.category,
+          },
+        ];
+    return {
+      routeStops: nextStops,
+      selectedAccountsForRoute: deriveAccountIds(nextStops),
+    };
+  }),
+
+  isStopInRoute: (stopId) => get().routeStops.some((s) => s.id === stopId),
+
+  reorderRouteStops: (fromIndex, toIndex) => set((state) => {
+    if (
+      fromIndex === toIndex ||
+      fromIndex < 0 ||
+      toIndex < 0 ||
+      fromIndex >= state.routeStops.length ||
+      toIndex >= state.routeStops.length
+    ) {
+      return {};
+    }
+    const next = state.routeStops.slice();
+    const [moved] = next.splice(fromIndex, 1);
+    next.splice(toIndex, 0, moved);
+    return {
+      routeStops: next,
+      selectedAccountsForRoute: deriveAccountIds(next),
+    };
+  }),
+
+  clearRouteSelection: () => set({ routeStops: [], selectedAccountsForRoute: [], loadedSavedRouteId: null }),
+
+  loadRouteFromSnapshot: (stops) => set({
+    routeStops: stops,
+    selectedAccountsForRoute: deriveAccountIds(stops),
+    isRouteModeActive: true,
+    loadedSavedRouteId: null,
+  }),
+
+  loadedSavedRouteId: null,
+  setLoadedSavedRouteId: (id) => set({ loadedSavedRouteId: id }),
+
+  toggleSidebar: () => set((state) => ({
+    isSidebarOpen: !state.isSidebarOpen
+  })),
+
+  setDrawerOpen: (open) => set({
+    isDrawerOpen: open,
+    selectedAccount: open ? get().selectedAccount : null,
+  }),
+
+  setMapView: (center, zoom) => set({ mapCenter: center, mapZoom: zoom }),
+
+  updateAccountStatus: (accountId, status) => set((state) => ({
+    accounts: state.accounts.map(account =>
+      account.id === accountId ? { ...account, accountStatus: status } : account
+    ),
+    selectedAccount: state.selectedAccount?.id === accountId
+      ? { ...state.selectedAccount, accountStatus: status }
+      : state.selectedAccount,
+  })),
+
+  // NOTE: Optimistic local-only update. Source of truth is the DB; values
+  // get reconciled on the next React Query refetch. The real persistence
+  // happens via useLogVisit() / AccountDrawer.
+  logVisit: (accountId, notes) => set((state) => {
+    const now = new Date().toISOString().split('T')[0];
+    return {
+      accounts: state.accounts.map(account =>
+        account.id === accountId
+          ? {
+              ...account,
+              visitCount: account.visitCount + 1,
+              lastVisitDate: now,
+              accountNotes: notes ? `${now}: ${notes}\n\n${account.accountNotes || ''}` : account.accountNotes,
+            }
+          : account
+      ),
+    };
+  }),
+
+  setAccounts: (accounts) => set((state) => {
+    // Only auto-enable filters on the FIRST load. After that, preserve the
+    // user's selections so window-focus refetches don't wipe their filters.
+    const isFirstLoad = state.accounts.length === 0;
+    if (!isFirstLoad) return { accounts };
+
+    const has = (pred: (a: typeof accounts[number]) => boolean) => accounts.some(pred);
+    const hasService = (s: ServiceType) => has((a) => a.services.includes(s));
+    return {
+      accounts,
+      statusFilters: {
+        lead: has(a => a.accountStatus === 'lead'),
+        active: has(a => a.accountStatus === 'active'),
+        canceled: has(a => a.accountStatus === 'canceled'),
+        new_customer: has(a => a.accountStatus === 'new_customer'),
+      },
+      serviceFilters: {
+        mowing: hasService('mowing'),
+        fertilizer: hasService('fertilizer'),
+        pestControl: hasService('pestControl'),
+        sprinklers: hasService('sprinklers'),
+        fullService: has(a => ALL_SERVICE_TYPES.every((s) => a.services.includes(s))),
+      },
+    };
+  }),
+
+  setUserLocation: (location) => set({ userLocation: location }),
+}));
+
+// Selector for filtered accounts — uses the advanced filter builder
+export const useFilteredAccounts = () => {
+  const accounts = useAppStore((s) => s.accounts);
+  const advancedFilters = useAppStore((s) => s.advancedFilters);
+  return accounts.filter((account) => evaluateFilters(account, advancedFilters));
+};

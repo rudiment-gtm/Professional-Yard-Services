@@ -1,0 +1,280 @@
+@tailwind base;
+@tailwind components;
+@tailwind utilities;
+
+/* Field Sales Mapping App - Design System
+   Professional, mobile-first, dark sidebar aesthetic
+   All colors in HSL format */
+
+@layer base {
+  :root {
+    /* Core backgrounds */
+    --background: 220 20% 97%;
+    --foreground: 220 20% 10%;
+
+    /* Cards and surfaces */
+    --card: 0 0% 100%;
+    --card-foreground: 220 20% 10%;
+
+    --popover: 0 0% 100%;
+    --popover-foreground: 220 20% 10%;
+
+    /* Primary - Professional Blue */
+    --primary: 217 91% 50%;
+    --primary-foreground: 0 0% 100%;
+
+    /* Secondary - Subtle gray */
+    --secondary: 220 14% 92%;
+    --secondary-foreground: 220 20% 20%;
+
+    /* Muted surfaces */
+    --muted: 220 14% 95%;
+    --muted-foreground: 220 10% 45%;
+
+    /* Accent */
+    --accent: 217 91% 95%;
+    --accent-foreground: 217 91% 40%;
+
+    /* Semantic status colors */
+    --status-lead: 195 85% 45%;
+    --status-active: 152 75% 40%;
+    --status-at-risk: 38 92% 50%;
+    --status-churned: 0 84% 55%;
+    --status-expansion: 271 81% 56%;
+    --status-flex-tier: 0 0% 0%;
+    --status-lost: 25 85% 37%;
+    --status-inactive: 330 75% 52%;
+
+    /* Destructive */
+    --destructive: 0 84% 55%;
+    --destructive-foreground: 0 0% 100%;
+
+    /* UI elements */
+    --border: 220 14% 88%;
+    --input: 220 14% 88%;
+    --ring: 217 91% 50%;
+
+    --radius: 0.625rem;
+
+    /* Sidebar - Dark charcoal */
+    --sidebar-background: 220 20% 8%;
+    --sidebar-foreground: 220 14% 90%;
+    --sidebar-primary: 217 91% 60%;
+    --sidebar-primary-foreground: 0 0% 100%;
+    --sidebar-accent: 220 20% 14%;
+    --sidebar-accent-foreground: 220 14% 95%;
+    --sidebar-border: 220 20% 16%;
+    --sidebar-ring: 217 91% 60%;
+    --sidebar-muted: 220 14% 60%;
+
+    /* Map pin colors */
+    --pin-lead: 195 85% 45%;
+    --pin-active: 152 75% 40%;
+    --pin-at-risk: 38 92% 50%;
+    --pin-churned: 0 84% 55%;
+    --pin-expansion: 271 81% 56%;
+    --pin-flex-tier: 0 0% 0%;
+    --pin-lost: 25 85% 37%;
+    --pin-inactive: 330 75% 52%;
+
+    /* Shadows */
+    --shadow-sm: 0 1px 2px 0 hsl(220 20% 10% / 0.05);
+    --shadow-md: 0 4px 6px -1px hsl(220 20% 10% / 0.1), 0 2px 4px -2px hsl(220 20% 10% / 0.1);
+    --shadow-lg: 0 10px 15px -3px hsl(220 20% 10% / 0.1), 0 4px 6px -4px hsl(220 20% 10% / 0.1);
+    --shadow-drawer: -8px 0 30px -12px hsl(220 20% 10% / 0.25);
+  }
+
+  .dark {
+    --background: 220 20% 6%;
+    --foreground: 220 14% 95%;
+
+    --card: 220 20% 10%;
+    --card-foreground: 220 14% 95%;
+
+    --popover: 220 20% 10%;
+    --popover-foreground: 220 14% 95%;
+
+    --primary: 217 91% 60%;
+    --primary-foreground: 220 20% 6%;
+
+    --secondary: 220 20% 16%;
+    --secondary-foreground: 220 14% 90%;
+
+    --muted: 220 20% 14%;
+    --muted-foreground: 220 14% 60%;
+
+    --accent: 217 91% 15%;
+    --accent-foreground: 217 91% 70%;
+
+    --destructive: 0 62% 50%;
+    --destructive-foreground: 0 0% 100%;
+
+    --border: 220 20% 18%;
+    --input: 220 20% 18%;
+    --ring: 217 91% 60%;
+
+    --sidebar-background: 220 20% 4%;
+    --sidebar-foreground: 220 14% 90%;
+    --sidebar-primary: 217 91% 60%;
+    --sidebar-primary-foreground: 0 0% 100%;
+    --sidebar-accent: 220 20% 10%;
+    --sidebar-accent-foreground: 220 14% 95%;
+    --sidebar-border: 220 20% 12%;
+    --sidebar-ring: 217 91% 60%;
+    --sidebar-muted: 220 14% 50%;
+  }
+}
+
+@layer base {
+  * {
+    @apply border-border;
+  }
+
+  body {
+    @apply bg-background text-foreground antialiased;
+    font-feature-settings: "rlig" 1, "calt" 1;
+  }
+
+  /* Leaflet map container needs explicit height */
+  .leaflet-container {
+    height: 100%;
+    width: 100%;
+    background: hsl(var(--background));
+  }
+}
+
+@layer components {
+  /* Status badges */
+  .status-badge {
+    @apply inline-flex items-center gap-1.5 px-2.5 py-1 rounded-full text-xs font-medium;
+  }
+
+  .status-badge-lead {
+    @apply bg-[hsl(195_85%_45%/0.15)] text-[hsl(195_85%_35%)];
+  }
+
+  .status-badge-active {
+    @apply bg-[hsl(152_75%_40%/0.15)] text-[hsl(152_75%_30%)];
+  }
+
+  .status-badge-at-risk {
+    @apply bg-[hsl(38_92%_50%/0.15)] text-[hsl(38_92%_35%)];
+  }
+
+  .status-badge-churned {
+    @apply bg-[hsl(0_84%_55%/0.15)] text-[hsl(0_84%_45%)];
+  }
+
+  .status-badge-expansion {
+    @apply bg-[hsl(271_81%_56%/0.15)] text-[hsl(271_81%_46%)];
+  }
+
+  .status-badge-flex-tier {
+    @apply bg-[hsl(0_0%_0%/0.12)] text-[hsl(0_0%_0%)];
+  }
+
+  .status-badge-lost {
+    @apply bg-[hsl(25_85%_37%/0.15)] text-[hsl(25_85%_30%)];
+  }
+
+  .status-badge-inactive {
+    @apply bg-[hsl(330_75%_52%/0.15)] text-[hsl(330_75%_42%)];
+  }
+
+  /* Sidebar filter toggles */
+  .filter-toggle {
+    @apply flex items-center gap-3 px-3 py-2.5 rounded-lg transition-all duration-200 cursor-pointer;
+    @apply hover:bg-sidebar-accent active:scale-[0.98];
+  }
+
+  .filter-toggle-active {
+    @apply bg-sidebar-accent;
+  }
+
+  /* Map pin markers */
+  .map-pin {
+    @apply w-8 h-8 rounded-full flex items-center justify-center shadow-lg border-2 border-white cursor-pointer transition-transform;
+    @apply hover:scale-110 active:scale-95;
+  }
+
+  /* Touch-friendly button */
+  .touch-button {
+    @apply min-h-[44px] min-w-[44px] flex items-center justify-center;
+  }
+
+  /* Drawer animations */
+  .drawer-enter {
+    animation: slideIn 0.3s ease-out;
+  }
+
+  .drawer-exit {
+    animation: slideOut 0.2s ease-in;
+  }
+
+  @keyframes slideIn {
+    from {
+      transform: translateX(100%);
+    }
+    to {
+      transform: translateX(0);
+    }
+  }
+
+  @keyframes slideOut {
+    from {
+      transform: translateX(0);
+    }
+    to {
+      transform: translateX(100%);
+    }
+  }
+
+  /* Route mode indicator */
+  .route-mode-active {
+    @apply ring-2 ring-primary ring-offset-2 ring-offset-sidebar-background;
+  }
+
+  /* Pulse animation for selected pins */
+  .pin-selected {
+    animation: pulse 2s cubic-bezier(0.4, 0, 0.6, 1) infinite;
+  }
+
+  @keyframes pulse {
+    0%, 100% {
+      box-shadow: 0 0 0 0 hsl(var(--primary) / 0.4);
+    }
+    50% {
+      box-shadow: 0 0 0 8px hsl(var(--primary) / 0);
+    }
+  }
+}
+
+@layer utilities {
+  /* Safe area padding for mobile */
+  .safe-bottom {
+    padding-bottom: env(safe-area-inset-bottom, 0);
+  }
+
+  .safe-top {
+    padding-top: env(safe-area-inset-top, 0);
+  }
+
+  /* Hide scrollbar but keep functionality */
+  .scrollbar-hide {
+    -ms-overflow-style: none;
+    scrollbar-width: none;
+  }
+
+  .scrollbar-hide::-webkit-scrollbar {
+    display: none;
+  }
+
+  /* Glass effect for overlays */
+  .glass {
+    @apply bg-white/80 backdrop-blur-lg;
+  }
+
+  .glass-dark {
+    @apply bg-sidebar-background/90 backdrop-blur-lg;
+  }
+}

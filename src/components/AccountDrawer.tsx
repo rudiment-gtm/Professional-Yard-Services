@@ -1,0 +1,1142 @@
+import { motion, AnimatePresence } from 'framer-motion';
+import {
+  X,
+  Phone,
+  Mail,
+  Linkedin,
+  MapPin,
+  Calendar,
+  CalendarIcon,
+  Clock,
+  User,
+  ClipboardCheck,
+  ChevronRight,
+  ExternalLink,
+  Trash2,
+  Pencil,
+  Check,
+  Info,
+  Binoculars,
+  Globe
+} from 'lucide-react';
+import { Calendar as CalendarPicker } from '@/components/ui/calendar';
+import { Popover, PopoverContent, PopoverTrigger } from '@/components/ui/popover';
+import { Input } from '@/components/ui/input';
+import {
+  Tooltip,
+  TooltipContent,
+  TooltipProvider,
+  TooltipTrigger,
+} from '@/components/ui/tooltip';
+import { useAppStore } from '@/store/appStore';
+import { statusConfig, serviceConfig, isFullService, FULL_SERVICE_CONFIG, AccountStatus, Account } from '@/types/account';
+import { Button } from '@/components/ui/button';
+import { Textarea } from '@/components/ui/textarea';
+import {
+  Select,
+  SelectContent,
+  SelectItem,
+  SelectTrigger,
+  SelectValue,
+} from "@/components/ui/select";
+import {
+  AlertDialog,
+  AlertDialogAction,
+  AlertDialogCancel,
+  AlertDialogContent,
+  AlertDialogDescription,
+  AlertDialogFooter,
+  AlertDialogHeader,
+  AlertDialogTitle,
+  AlertDialogTrigger,
+} from "@/components/ui/alert-dialog";
+import { useState, useEffect } from 'react';
+import { cn } from '@/lib/utils';
+import { supabase } from '@/integrations/supabase/client';
+import { toast } from 'sonner';
+import { useQueryClient } from '@tanstack/react-query';
+import { useAuthContext } from '@/components/AuthProvider';
+import { useAccountNotes, useAddNote, useUpdateNote, useDeleteNote } from '@/hooks/useAccountNotes';
+import type { AccountNote } from '@/hooks/useAccountNotes';
+import { useAccountEvents, useRetryEventSync } from '@/hooks/useAccountEvents';
+import { findAccountByAddress, useCreateAccountFromAroundMe } from '@/hooks/useAccounts';
+import { format } from 'date-fns';
+import { useHubSpotConnection } from '@/hooks/useHubspotConnection';
+import { HubSpotRetryButton } from '@/components/HubspotRetryButton';
+
+// QB accounts often only have company + free-text contact fields (no named
+// person) — ~49% of source rows have no first/last name at all. Build a
+// best-effort display name and let callers render the null case gracefully.
+function getContactDisplayName(account: Account): string | null {
+  const named = [account.firstName, account.lastName].filter(Boolean).join(' ');
+  return named || account.primaryContact || account.secondaryContact || null;
+}
+
+
+export default function AccountDrawer() {
+  const { selectedAccount, isDrawerOpen, setDrawerOpen, updateAccountStatus, logVisit, accounts, openAroundMeWithOrigin } = useAppStore();
+  const [visitNotes, setVisitNotes] = useState('');
+  const [isDeleting, setIsDeleting] = useState(false);
+  const [editingNoteId, setEditingNoteId] = useState<string | null>(null);
+  const [editingNoteText, setEditingNoteText] = useState('');
+  const [eventType, setEventType] = useState<string>('');
+  const [eventMedium, setEventMedium] = useState<string>('');
+  const [assignedTo, setAssignedTo] = useState<string>('');
+
+  const eventMediumOptions = ['In-Person', 'Phone Call', 'Video Call', 'Email', 'Text', 'Other'];
+
+  const toHHMM = (d: Date) => `${String(d.getHours()).padStart(2, '0')}:${String(d.getMinutes()).padStart(2, '0')}`;
+
+  const [startDate, setStartDate] = useState<Date>(new Date());
+  const [startTime, setStartTime] = useState<string>(toHHMM(new Date()));
+  const [endDate, setEndDate] = useState<Date>(new Date(Date.now() + 30 * 60 * 1000));
+  const [endTime, setEndTime] = useState<string>(toHHMM(new Date(Date.now() + 30 * 60 * 1000)));
+
+  const eventTypeOptions = [
+    'Call',
+    'Drop By',
+    'Follow up',
+    'Presentation',
+    'Setup',
+    'First Post',
+    'Training',
+    'Onboarding',
+    'Direct Hire',
+    'Retention',
+    'Expansion',
+    'Reactivation',
+    'Freshdesk Ticket',
+  ];
+
+  const assignedToOptions = [
+    'Tiffany Luke-Jones',
+    'Richard Perez',
+    'Jesse Lopez',
+    'Evan Asplund',
+    'House',
+  ];
+  const queryClient = useQueryClient();
+  const { user, profile } = useAuthContext();
+  const isPreview = !!selectedAccount?.isAroundMePreview;
+  const realAccountId = isPreview ? undefined : selectedAccount?.id;
+  const { data: accountNotes = [], isLoading: notesLoading } = useAccountNotes(realAccountId);
+  const addNoteMutation = useAddNote();
+  const updateNoteMutation = useUpdateNote();
+  const deleteNoteMutation = useDeleteNote();
+  const { data: hubspotConnection } = useHubSpotConnection();
+  const { data: accountEvents = [] } = useAccountEvents(realAccountId);
+  const retryEventSync = useRetryEventSync();
+  const createAccountFromAroundMe = useCreateAccountFromAroundMe();
+
+  const [now, setNow] = useState(() => Date.now());
+
+  const SYNC_GRACE_MS = 60_000;
+  const hasPendingSync = accountEvents.some(
+    (ev) => !ev.hubspot_id && Date.now() - new Date(ev.created_at).getTime() < SYNC_GRACE_MS + 5_000,
+  );
+
+  useEffect(() => {
+    if (!hasPendingSync) return;
+    const tick = setInterval(() => {
+      setNow(Date.now());
+      queryClient.invalidateQueries({ queryKey: ['account_events', selectedAccount?.id] });
+    }, 10_000);
+    return () => clearInterval(tick);
+  }, [hasPendingSync, selectedAccount?.id, queryClient]);
+
+  // Reset event log times to current local time whenever drawer opens
+  useEffect(() => {
+    if (isDrawerOpen) {
+      const now = new Date();
+      const end = new Date(now.getTime() + 30 * 60 * 1000);
+      setStartDate(now);
+      setStartTime(toHHMM(now));
+      setEndDate(end);
+      setEndTime(toHHMM(end));
+    }
+  }, [isDrawerOpen]);
+  
+  if (!selectedAccount) return null;
+
+  const combineDateTime = (d: Date, t: string): Date | null => {
+    if (!d || !t) return null;
+    const [hh, mm] = t.split(':').map(Number);
+    const out = new Date(d);
+    out.setHours(hh ?? 0, mm ?? 0, 0, 0);
+    return out;
+  };
+  const startAt = combineDateTime(startDate, startTime);
+  const endAt = combineDateTime(endDate, endTime);
+  const missingFields: string[] = [];
+  if (!eventType) missingFields.push('Event Type');
+  if (!eventMedium) missingFields.push('Event Medium');
+  if (!assignedTo) missingFields.push('Assigned To');
+  if (!startDate || !startTime) missingFields.push('Start');
+  if (!endDate || !endTime) missingFields.push('End');
+  const endBeforeStart = !!(startAt && endAt && endAt < startAt);
+  const canLog = missingFields.length === 0 && !endBeforeStart;
+  const disabledReason = !canLog
+    ? endBeforeStart
+      ? 'End must be after start.'
+      : `Please fill: ${missingFields.join(', ')}.`
+    : '';
+
+  const config = statusConfig[selectedAccount.accountStatus];
+  const contactDisplayName = getContactDisplayName(selectedAccount);
+
+  const secondaryContacts = accounts.filter(
+    account =>
+      !!selectedAccount.routeAddress &&
+      account.routeAddress === selectedAccount.routeAddress &&
+      account.id !== selectedAccount.id
+  );
+  
+  const handleLogVisit = async () => {
+    if (!canLog || !startAt || !endAt) {
+      toast.error(disabledReason || 'Please complete required fields');
+      return;
+    }
+
+    // Around-Me preview flow: dedup by address first. If a match exists,
+    // redirect the rep to the existing account instead of creating a duplicate.
+    // If no match, promote the POI to a real account before logging the event.
+    let effectiveAccount = selectedAccount;
+    if (selectedAccount.isAroundMePreview) {
+      try {
+        const existing = await findAccountByAddress(
+          selectedAccount.routeAddress,
+          selectedAccount.routeZip,
+          selectedAccount.routeCity,
+        );
+        if (existing) {
+          toast.success(`This account already exists — opening "${existing.accountName}".`);
+          // Swap drawer to the real account so the rep can log there.
+          useAppStore.setState({ selectedAccount: existing, isDrawerOpen: true });
+          return;
+        }
+      } catch (err) {
+        console.error('[AccountDrawer] address dedup lookup failed', err);
+        toast.error('Could not verify this address. Please try again.');
+        return;
+      }
+
+      // No match — create the account now.
+      try {
+        const created = await createAccountFromAroundMe.mutateAsync({
+          id: selectedAccount.aroundMeSourceId || selectedAccount.id,
+          name: selectedAccount.accountName,
+          address: [
+            selectedAccount.routeAddress,
+            selectedAccount.routeCity,
+            `${selectedAccount.routeState ?? ''} ${selectedAccount.routeZip ?? ''}`.trim(),
+          ].filter(Boolean).join(', '),
+          latitude: selectedAccount.latitude,
+          longitude: selectedAccount.longitude,
+          category: '',
+          prospectCategory: 'other',
+          distanceMiles: 0,
+        });
+        effectiveAccount = created;
+        useAppStore.setState({ selectedAccount: created });
+      } catch (err) {
+        console.error('[AccountDrawer] create account from around-me failed', err);
+        toast.error('Could not create this account. Please try again.');
+        return;
+      }
+    }
+
+    logVisit(effectiveAccount.id, visitNotes);
+    const noteText = visitNotes;
+    const evType = eventType;
+    const evMedium = eventMedium;
+    const assignee = assignedTo;
+    const startIso = startAt.toISOString();
+    const endIso = endAt.toISOString();
+    setVisitNotes('');
+    
+    setEventType('');
+    setEventMedium('');
+    setAssignedTo('');
+
+    try {
+      const { data: evData, error } = await supabase
+        .from('account_events')
+        .insert({
+          account_id: effectiveAccount.id,
+          event_type: evType || 'visit',
+          event_medium: evMedium,
+          assigned_to: assignee,
+          start_at: startIso,
+          end_at: endIso,
+          notes: noteText || null,
+          author_user_id: user?.id ?? '00000000-0000-0000-0000-000000000000',
+          author_name: user?.email ?? 'Unknown',
+        })
+        .select()
+        .single();
+      if (error) throw error;
+      if (!evData) throw new Error('Event was not created');
+      const ev = evData as { id: string };
+      queryClient.invalidateQueries({ queryKey: ['account_events', effectiveAccount.id] });
+      const retrySync = async (eventId: string) => {
+        try {
+          const { data: retryData, error: retryErr } = await supabase.functions.invoke('hubspot-sync-event', { body: { event_id: eventId } });
+          if (retryErr) throw retryErr;
+          queryClient.invalidateQueries({ queryKey: ['account_events', effectiveAccount.id] });
+          if (retryData?.ok === false && retryData?.reason === 'missing_hubspot_id') {
+            toast.warning('Link this account to a HubSpot account to enable sync.');
+          } else {
+            toast.success('Synced to HubSpot');
+          }
+        } catch {
+          toast.error('Sync failed again', {
+            action: { label: 'Retry', onClick: () => retrySync(eventId) },
+          });
+        }
+      };
+      // If the account has no HubSpot Account yet, create or link one first
+      // so the event attaches to the correct record (with dedup by email/address/name+city).
+      let hasHubSpot = !!effectiveAccount.hubspotCompanyId;
+      if (!hasHubSpot) {
+        try {
+          const { data: createData, error: createErr } = await supabase.functions.invoke(
+            'hubspot-create-account',
+            { body: { account_id: effectiveAccount.id } },
+          );
+          if (createErr) throw createErr;
+          if (createData?.hubspot_account_id) {
+            hasHubSpot = true;
+            // Reflect the new HubSpot id locally so the drawer shows it and future syncs skip creation
+            useAppStore.setState((s) => ({
+              accounts: s.accounts.map((l) => l.id === effectiveAccount.id ? { ...l, hubspotCompanyId: createData.hubspot_account_id } : l),
+              selectedAccount: s.selectedAccount?.id === effectiveAccount.id
+                ? { ...s.selectedAccount, hubspotCompanyId: createData.hubspot_account_id }
+                : s.selectedAccount,
+            }));
+            queryClient.invalidateQueries({ queryKey: ['accounts'] });
+            toast.success(createData.matched ? 'Linked to existing HubSpot account' : 'Created new HubSpot account');
+          }
+        } catch (sfErr) {
+          console.error('HubSpot account create/link failed', sfErr);
+          toast.warning('Event saved locally. Could not create a HubSpot account to sync to.');
+        }
+      }
+
+
+      const { data: syncData, error: syncErr } = await supabase.functions.invoke('hubspot-sync-event', { body: { event_id: ev.id } });
+      if (syncErr) {
+        toast.warning('Event saved. HubSpot sync failed.', {
+          action: { label: 'Retry sync', onClick: () => retrySync(ev.id) },
+          duration: 10000,
+        });
+      } else if (syncData?.ok === false && syncData?.reason === 'missing_hubspot_id') {
+        toast.warning('Event saved locally. Link this account to a HubSpot account to enable sync.');
+      } else {
+        toast.success('Event logged & synced to HubSpot');
+      }
+    } catch (e) {
+      console.error('Log event error', e);
+      toast.error('Failed to log event');
+    }
+  };
+
+  const handleDeleteAccount = async () => {
+    setIsDeleting(true);
+    try {
+      const { error } = await supabase
+        .from('accounts')
+        .delete()
+        .eq('id', selectedAccount.id);
+
+      if (error) throw error;
+
+      toast.success('Account deleted successfully');
+      setDrawerOpen(false);
+      queryClient.invalidateQueries({ queryKey: ['accounts'] });
+    } catch (error) {
+      console.error('Error deleting account:', error);
+      toast.error('Failed to delete account');
+    } finally {
+      setIsDeleting(false);
+    }
+  };
+  
+  const formatDate = (dateStr?: string) => {
+    if (!dateStr) return 'Never';
+    return new Date(dateStr).toLocaleDateString('en-US', {
+      month: 'short',
+      day: 'numeric',
+      year: 'numeric',
+    });
+  };
+  
+  return (
+    <AnimatePresence>
+      {isDrawerOpen && (
+        <>
+          {/* Backdrop */}
+          <motion.div
+            initial={{ opacity: 0 }}
+            animate={{ opacity: 1 }}
+            exit={{ opacity: 0 }}
+            className="fixed inset-0 bg-foreground/20 backdrop-blur-sm z-40 md:hidden"
+            onClick={() => setDrawerOpen(false)}
+          />
+          
+          {/* Drawer */}
+          <motion.div
+            initial={{ x: '100%' }}
+            animate={{ x: 0 }}
+            exit={{ x: '100%' }}
+            transition={{ type: 'spring', damping: 30, stiffness: 300 }}
+            className={cn(
+              "fixed right-0 top-0 h-full z-50 overflow-hidden",
+              "w-full sm:w-[420px] bg-card shadow-drawer",
+              "flex flex-col"
+            )}
+          >
+            {/* Header */}
+            <div className="flex items-start justify-between p-4 border-b bg-gradient-to-r from-primary/5 to-transparent">
+              <div className="flex-1 min-w-0">
+                <div className="flex items-center gap-2 flex-wrap">
+                  {selectedAccount.id.startsWith('preview:') ? (
+                    <h2 className="text-lg font-bold text-foreground truncate">
+                      {selectedAccount.accountName}
+                    </h2>
+                  ) : (
+                    <button
+                      type="button"
+                      onClick={() => {
+                        const account = selectedAccount;
+                        setDrawerOpen(false);
+                        window.dispatchEvent(
+                          new CustomEvent('previewAccount', {
+                            detail: { id: account.id, latitude: account.latitude, longitude: account.longitude },
+                          })
+                        );
+                      }}
+                      className="text-lg font-bold text-foreground truncate text-left hover:underline hover:text-primary focus:outline-none focus:underline"
+                      title="Show on map"
+                    >
+                      {selectedAccount.accountName}
+                    </button>
+                  )}
+                </div>
+                <div className="flex items-center gap-2 mt-1 flex-wrap">
+                  <span className={`status-badge ${config.bgClass}`}>
+                    {config.label}
+                  </span>
+                  {isFullService(selectedAccount.services) ? (
+                    <span
+                      className="inline-flex items-center px-2 py-0.5 rounded-full text-xs font-semibold shrink-0"
+                      style={{ backgroundColor: `${FULL_SERVICE_CONFIG.color}20`, color: FULL_SERVICE_CONFIG.color }}
+                    >
+                      {FULL_SERVICE_CONFIG.label}
+                    </span>
+                  ) : selectedAccount.services.length > 0 ? (
+                    selectedAccount.services.map((s) => (
+                      <span
+                        key={s}
+                        className="inline-flex items-center px-2 py-0.5 rounded-full text-xs font-semibold shrink-0"
+                        style={{ backgroundColor: `${serviceConfig[s].color}20`, color: serviceConfig[s].color }}
+                      >
+                        {serviceConfig[s].label}
+                      </span>
+                    ))
+                  ) : (
+                    <span className="text-xs text-muted-foreground">No services</span>
+                  )}
+                  {selectedAccount.hubspotCompanyId ? (
+                    hubspotConnection?.instanceUrl ? (
+                      <a
+                        href={`${hubspotConnection.instanceUrl}/${selectedAccount.hubspotCompanyId}`}
+                        target="_blank"
+                        rel="noopener noreferrer"
+                        title={`Open in HubSpot: ${selectedAccount.hubspotCompanyId}`}
+                        className="inline-flex items-center gap-1 text-xs text-muted-foreground hover:text-primary transition-colors"
+                      >
+                        HubSpot: {selectedAccount.hubspotCompanyId.slice(0, 6)}…
+                        <ExternalLink className="w-3 h-3" />
+                      </a>
+                    ) : (
+                      <span
+                        title={selectedAccount.hubspotCompanyId}
+                        className="text-xs text-muted-foreground"
+                      >
+                        HubSpot: {selectedAccount.hubspotCompanyId.slice(0, 6)}…
+                      </span>
+                    )
+                  ) : (!isPreview && (
+                    <HubSpotRetryButton accountId={selectedAccount.id} />
+                  ))}
+                </div>
+              </div>
+              <button
+                onClick={() => setDrawerOpen(false)}
+                className="touch-button text-muted-foreground hover:text-foreground transition-colors -mr-2 -mt-1"
+              >
+                <X className="w-5 h-5" />
+              </button>
+            </div>
+            
+            {/* Content */}
+            <div className="flex-1 overflow-y-auto p-4 space-y-6 scrollbar-hide safe-bottom">
+              {isPreview && (
+                <div className="flex items-start gap-2 p-3 rounded-lg bg-pink-500/10 border border-pink-500/30 text-xs text-pink-700 dark:text-pink-300">
+                  <Info className="w-4 h-4 flex-shrink-0 mt-0.5" />
+                  <span>
+                    <strong>Not yet saved.</strong> Logging an event will check for an existing account at this address; if none exists, it will create a new account and sync it to HubSpot.
+                  </span>
+                </div>
+              )}
+
+              {/* Primary Contact Card */}
+              <div className="space-y-2">
+                <h3 className="text-sm font-semibold text-muted-foreground uppercase tracking-wider">
+                   Main Contact
+                </h3>
+                <div className="bg-muted/50 rounded-xl p-4 space-y-3">
+                  <div className="flex items-center gap-3">
+                    <div className="w-12 h-12 bg-primary/10 rounded-full flex items-center justify-center">
+                      <User className="w-6 h-6 text-primary" />
+                    </div>
+                    <div>
+                      <p className="font-semibold text-foreground">
+                        {contactDisplayName || <span className="italic text-muted-foreground font-normal">No named contact</span>}
+                      </p>
+                      <p className="text-sm text-muted-foreground">{selectedAccount.jobTitle || '—'}</p>
+                    </div>
+                  </div>
+
+                  <div className="grid gap-2 pt-2">
+                    {selectedAccount.mainPhone ? (
+                      <a
+                        href={`tel:${selectedAccount.mainPhone}`}
+                        className="flex items-center gap-3 p-2 rounded-lg hover:bg-muted transition-colors group"
+                      >
+                        <Phone className="w-4 h-4 text-muted-foreground group-hover:text-primary" />
+                        <span className="text-sm">{selectedAccount.mainPhone}</span>
+                        <ChevronRight className="w-4 h-4 ml-auto text-muted-foreground" />
+                      </a>
+                    ) : (
+                      <div className="flex items-center gap-3 p-2 rounded-lg">
+                        <Phone className="w-4 h-4 text-muted-foreground" />
+                        <span className="text-sm text-muted-foreground">—</span>
+                      </div>
+                    )}
+                    {selectedAccount.mainEmail ? (
+                      <a
+                        href={`mailto:${selectedAccount.mainEmail}`}
+                        className="flex items-center gap-3 p-2 rounded-lg hover:bg-muted transition-colors group"
+                      >
+                        <Mail className="w-4 h-4 text-muted-foreground group-hover:text-primary" />
+                        <span className="text-sm truncate">{selectedAccount.mainEmail}</span>
+                        <ChevronRight className="w-4 h-4 ml-auto text-muted-foreground flex-shrink-0" />
+                      </a>
+                    ) : (
+                      <div className="flex items-center gap-3 p-2 rounded-lg">
+                        <Mail className="w-4 h-4 text-muted-foreground" />
+                        <span className="text-sm text-muted-foreground">—</span>
+                      </div>
+                    )}
+                    {selectedAccount.website ? (
+                      <a
+                        href={/^https?:\/\//i.test(selectedAccount.website) ? selectedAccount.website : `https://${selectedAccount.website}`}
+                        target="_blank"
+                        rel="noopener noreferrer"
+                        className="flex items-center gap-3 p-2 rounded-lg hover:bg-muted transition-colors group"
+                      >
+                        <Globe className="w-4 h-4 text-muted-foreground group-hover:text-primary" />
+                        <span className="text-sm truncate">{selectedAccount.website.replace(/^https?:\/\//i, '')}</span>
+                        <ExternalLink className="w-4 h-4 ml-auto text-muted-foreground flex-shrink-0" />
+                      </a>
+                    ) : (
+                      <div className="flex items-center gap-3 p-2 rounded-lg">
+                        <Globe className="w-4 h-4 text-muted-foreground" />
+                        <span className="text-sm text-muted-foreground">—</span>
+                      </div>
+                    )}
+                    {selectedAccount.linkedinUrl && (
+                      <a 
+                        href={selectedAccount.linkedinUrl}
+                        target="_blank"
+                        rel="noopener noreferrer"
+                        className="flex items-center gap-3 p-2 rounded-lg hover:bg-muted transition-colors group"
+                      >
+                        <Linkedin className="w-4 h-4 text-muted-foreground group-hover:text-primary" />
+                        <span className="text-sm">LinkedIn Profile</span>
+                        <ExternalLink className="w-4 h-4 ml-auto text-muted-foreground" />
+                      </a>
+                    )}
+                  </div>
+                </div>
+              </div>
+
+              {/* Secondary Contacts */}
+              {secondaryContacts.length > 0 && (
+                <div className="space-y-2">
+                  <h3 className="text-sm font-semibold text-muted-foreground uppercase tracking-wider">
+                    Secondary Contacts ({secondaryContacts.length})
+                  </h3>
+                  <div className="space-y-2">
+                    {secondaryContacts.map((contact) => (
+                      <div key={contact.id} className="bg-muted/50 rounded-xl p-3 space-y-2">
+                        <div className="flex items-center gap-3">
+                          <div className="w-8 h-8 bg-primary/10 rounded-full flex items-center justify-center">
+                            <User className="w-4 h-4 text-primary" />
+                          </div>
+                          <div className="min-w-0">
+                            <p className="font-semibold text-sm text-foreground truncate">
+                              {getContactDisplayName(contact) || <span className="italic text-muted-foreground font-normal">No named contact</span>}
+                            </p>
+                            <p className="text-xs text-muted-foreground">{contact.jobTitle || '—'}</p>
+                          </div>
+                        </div>
+                        <div className="grid gap-1 pl-11">
+                          {contact.mainPhone ? (
+                            <a
+                              href={`tel:${contact.mainPhone}`}
+                              className="flex items-center gap-2 p-1.5 rounded-lg hover:bg-muted transition-colors group"
+                            >
+                              <Phone className="w-3.5 h-3.5 text-muted-foreground group-hover:text-primary" />
+                              <span className="text-xs">{contact.mainPhone}</span>
+                            </a>
+                          ) : (
+                            <div className="flex items-center gap-2 p-1.5">
+                              <Phone className="w-3.5 h-3.5 text-muted-foreground" />
+                              <span className="text-xs text-muted-foreground">—</span>
+                            </div>
+                          )}
+                          {contact.mainEmail ? (
+                            <a
+                              href={`mailto:${contact.mainEmail}`}
+                              className="flex items-center gap-2 p-1.5 rounded-lg hover:bg-muted transition-colors group"
+                            >
+                              <Mail className="w-3.5 h-3.5 text-muted-foreground group-hover:text-primary" />
+                              <span className="text-xs truncate">{contact.mainEmail}</span>
+                            </a>
+                          ) : (
+                            <div className="flex items-center gap-2 p-1.5">
+                              <Mail className="w-3.5 h-3.5 text-muted-foreground" />
+                              <span className="text-xs text-muted-foreground">—</span>
+                            </div>
+                          )}
+                        </div>
+                      </div>
+                    ))}
+                  </div>
+                </div>
+              )}
+              
+              {/* Address */}
+              <div className="space-y-2">
+                <h3 className="text-sm font-semibold text-muted-foreground uppercase tracking-wider">
+                  Route Address
+                </h3>
+                {(() => {
+                  const formattedAddress = [
+                    selectedAccount.routeAddress,
+                    selectedAccount.routeCity,
+                    `${selectedAccount.routeState ?? ''} ${selectedAccount.routeZip ?? ''}`.trim()
+                  ].filter(Boolean).join(', ');
+
+                  return (
+                    <a
+                      href={`https://maps.google.com/?q=${encodeURIComponent(formattedAddress)}`}
+                      target="_blank"
+                      rel="noopener noreferrer"
+                      className="flex items-start gap-3 p-3 bg-muted/50 rounded-xl hover:bg-muted transition-colors group"
+                    >
+                      <MapPin className="w-5 h-5 text-muted-foreground group-hover:text-primary flex-shrink-0 mt-0.5" />
+                      <div className="flex-1">
+                        <p className="text-sm">{formattedAddress || '—'}</p>
+                      </div>
+                      <ExternalLink className="w-4 h-4 text-muted-foreground flex-shrink-0" />
+                    </a>
+                  );
+                })()}
+                {(() => {
+                  const formattedBilling = [
+                    selectedAccount.billingAddress,
+                    selectedAccount.billingCity,
+                    `${selectedAccount.billingState ?? ''} ${selectedAccount.billingZip ?? ''}`.trim()
+                  ].filter(Boolean).join(', ');
+                  if (!formattedBilling || formattedBilling === selectedAccount.routeAddress) return null;
+
+                  return (
+                    <div className="flex items-start gap-3 p-3 rounded-xl">
+                      <MapPin className="w-4 h-4 text-muted-foreground/60 flex-shrink-0 mt-0.5" />
+                      <div className="flex-1">
+                        <p className="text-xs text-muted-foreground">Billing: {formattedBilling}</p>
+                      </div>
+                    </div>
+                  );
+                })()}
+              </div>
+
+              {/* Activity & Stats */}
+              <div className="space-y-2">
+                <h3 className="text-sm font-semibold text-muted-foreground uppercase tracking-wider">
+                  Activity
+                </h3>
+                <div className="grid grid-cols-2 gap-3">
+                  <div className="bg-muted/50 rounded-xl p-3">
+                    <div className="flex items-center gap-2 text-muted-foreground mb-1">
+                      <Calendar className="w-4 h-4" />
+                      <span className="text-xs">Last Visit</span>
+                    </div>
+                    <p className="font-semibold">{formatDate(selectedAccount.lastVisitDate)}</p>
+                  </div>
+                  <div className="bg-muted/50 rounded-xl p-3">
+                    <div className="flex items-center gap-2 text-muted-foreground mb-1">
+                      <ClipboardCheck className="w-4 h-4" />
+                      <span className="text-xs">Total Visits</span>
+                    </div>
+                    <p className="font-semibold">{selectedAccount.visitCount}</p>
+                  </div>
+                  {selectedAccount.nextFollowUpDate && (
+                    <div className="bg-muted/50 rounded-xl p-3 col-span-2">
+                      <div className="flex items-center gap-2 text-muted-foreground mb-1">
+                        <Calendar className="w-4 h-4" />
+                        <span className="text-xs">Next Follow-up</span>
+                      </div>
+                      <p className="font-semibold">{formatDate(selectedAccount.nextFollowUpDate)}</p>
+                    </div>
+                  )}
+                </div>
+              </div>
+
+              {/* Status Update */}
+              <div className="space-y-2 pb-[15px]">
+                <h3 className="text-sm font-semibold text-muted-foreground uppercase tracking-wider">
+                  Update Status
+                </h3>
+                <Select
+                  value={selectedAccount.accountStatus}
+                  onValueChange={(value) => updateAccountStatus(selectedAccount.id, value as AccountStatus)}
+                  disabled={isPreview}
+                >
+                  <SelectTrigger className="w-full">
+                    <SelectValue />
+                  </SelectTrigger>
+                  <SelectContent>
+                    {Object.entries(statusConfig).map(([key, value]) => (
+                      <SelectItem key={key} value={key}>
+                        <div className="flex items-center gap-2">
+                          <div 
+                            className="w-2.5 h-2.5 rounded-full"
+                            style={{ backgroundColor: value.color }}
+                          />
+                          {value.label}
+                        </div>
+                      </SelectItem>
+                    ))}
+                  </SelectContent>
+                </Select>
+              </div>
+
+              <div className="space-y-2 pb-[15px]">
+                <h3 className="text-sm font-semibold text-muted-foreground uppercase tracking-wider">
+                  <span className="text-destructive">*</span> Event Type
+                </h3>
+                <Select value={eventType} onValueChange={(v) => {
+                  setEventType(v);
+                  if (v === 'Drop By') setEventMedium('In-Person');
+                }}>
+                  <SelectTrigger className="w-full">
+                    <SelectValue placeholder="Select event type" />
+                  </SelectTrigger>
+                  <SelectContent>
+                    {eventTypeOptions.map((opt) => (
+                      <SelectItem key={opt} value={opt}>
+                        {opt}
+                      </SelectItem>
+                    ))}
+                  </SelectContent>
+                </Select>
+              </div>
+
+              {/* Event Medium */}
+              <div className="space-y-2 pb-[15px]">
+                <h3 className="text-sm font-semibold text-muted-foreground uppercase tracking-wider">
+                  <span className="text-destructive">*</span> Event Medium
+                </h3>
+                <Select value={eventMedium} onValueChange={setEventMedium}>
+                  <SelectTrigger className="w-full">
+                    <SelectValue placeholder="Select event medium" />
+                  </SelectTrigger>
+                  <SelectContent>
+                    {eventMediumOptions.map((opt) => (
+                      <SelectItem key={opt} value={opt}>
+                        {opt}
+                      </SelectItem>
+                    ))}
+                  </SelectContent>
+                </Select>
+              </div>
+
+              {/* Assigned To */}
+              <div className="space-y-2 pb-[15px]">
+                <h3 className="text-sm font-semibold text-muted-foreground uppercase tracking-wider">
+                  <span className="text-destructive">*</span> Assigned To
+                </h3>
+                <Select value={assignedTo} onValueChange={setAssignedTo}>
+                  <SelectTrigger className="w-full">
+                    <SelectValue placeholder="Select assignee" />
+                  </SelectTrigger>
+                  <SelectContent>
+                    {assignedToOptions.map((opt) => (
+                      <SelectItem key={opt} value={opt}>
+                        {opt}
+                      </SelectItem>
+                    ))}
+                  </SelectContent>
+                </Select>
+              </div>
+
+              {/* Start Date/Time */}
+              <div className="space-y-2 pb-[15px]">
+                <h3 className="text-sm font-bold text-foreground">Start</h3>
+                <div className="grid grid-cols-2 gap-3">
+                  <div className="space-y-1">
+                    <label className="text-xs text-muted-foreground">
+                      <span className="text-destructive">*</span> Date
+                    </label>
+                    <Popover>
+                      <PopoverTrigger asChild>
+                        <Button
+                          variant="outline"
+                          className={cn("w-full justify-between font-normal", !startDate && "text-muted-foreground")}
+                        >
+                          {startDate ? format(startDate, 'MMM d, yyyy') : 'Pick a date'}
+                          <CalendarIcon className="h-4 w-4 opacity-50" />
+                        </Button>
+                      </PopoverTrigger>
+                      <PopoverContent className="w-auto p-0" align="start">
+                        <CalendarPicker
+                          mode="single"
+                          selected={startDate}
+                          onSelect={(d) => {
+                            if (!d) return;
+                            setStartDate(d);
+                            setEndDate((prev) => {
+                              const next = new Date(prev);
+                              next.setFullYear(d.getFullYear(), d.getMonth(), d.getDate());
+                              return next;
+                            });
+                          }}
+                          initialFocus
+                          className={cn("p-3 pointer-events-auto")}
+                        />
+                      </PopoverContent>
+                    </Popover>
+                  </div>
+                  <div className="space-y-1">
+                    <label className="text-xs text-muted-foreground">
+                      <span className="text-destructive">*</span> Time
+                    </label>
+                    <div className="relative">
+                      <Input
+                        type="time"
+                        value={startTime}
+                        onChange={(e) => setStartTime(e.target.value)}
+                        className="pr-9"
+                      />
+                      <Clock className="absolute right-3 top-1/2 -translate-y-1/2 h-4 w-4 opacity-50 pointer-events-none" />
+                    </div>
+                  </div>
+                </div>
+              </div>
+
+              {/* End Date/Time */}
+              <div className="space-y-2 pb-[15px]">
+                <h3 className="text-sm font-bold text-foreground">End</h3>
+                <div className="grid grid-cols-2 gap-3">
+                  <div className="space-y-1">
+                    <label className="text-xs text-muted-foreground">
+                      <span className="text-destructive">*</span> Date
+                    </label>
+                    <Popover>
+                      <PopoverTrigger asChild>
+                        <Button
+                          variant="outline"
+                          className={cn("w-full justify-between font-normal", !endDate && "text-muted-foreground")}
+                        >
+                          {endDate ? format(endDate, 'MMM d, yyyy') : 'Pick a date'}
+                          <CalendarIcon className="h-4 w-4 opacity-50" />
+                        </Button>
+                      </PopoverTrigger>
+                      <PopoverContent className="w-auto p-0" align="start">
+                        <CalendarPicker
+                          mode="single"
+                          selected={endDate}
+                          onSelect={(d) => d && setEndDate(d)}
+                          initialFocus
+                          className={cn("p-3 pointer-events-auto")}
+                        />
+                      </PopoverContent>
+                    </Popover>
+                  </div>
+                  <div className="space-y-1">
+                    <label className="text-xs text-muted-foreground">
+                      <span className="text-destructive">*</span> Time
+                    </label>
+                    <div className="relative">
+                      <Input
+                        type="time"
+                        value={endTime}
+                        onChange={(e) => setEndTime(e.target.value)}
+                        className="pr-9"
+                      />
+                      <Clock className="absolute right-3 top-1/2 -translate-y-1/2 h-4 w-4 opacity-50 pointer-events-none" />
+                    </div>
+                  </div>
+                </div>
+                {endBeforeStart && (
+                  <p className="text-xs text-destructive">End must be after start.</p>
+                )}
+              </div>
+
+              {/* Visit Notes */}
+              <div className="space-y-3">
+                <h3 className="text-sm font-semibold text-muted-foreground uppercase tracking-wider">
+                  Notes
+                </h3>
+                <div className="space-y-2">
+                  {!selectedAccount.hubspotCompanyId && (
+                    <div className="flex items-start gap-2 p-2 rounded-lg bg-amber-500/10 border border-amber-500/30 text-xs text-amber-700 dark:text-amber-300">
+                      <Info className="w-3.5 h-3.5 flex-shrink-0 mt-0.5" />
+                      <span>This account isn't linked to a HubSpot account. Events can be logged but won't sync.</span>
+                    </div>
+                  )}
+                  <Textarea
+                    placeholder="What happened during this visit?"
+                    value={visitNotes}
+                    onChange={(e) => setVisitNotes(e.target.value)}
+                    className="min-h-[80px] resize-none"
+                  />
+                  <TooltipProvider>
+                    <Tooltip>
+                      <TooltipTrigger asChild>
+                        <span className={cn("block w-full", !canLog && "cursor-not-allowed")}>
+                          <Button
+                            size="sm"
+                            className="w-full gap-2"
+                            disabled={!canLog}
+                            onClick={() => {
+                              if (!canLog) {
+                                toast.error(disabledReason);
+                                return;
+                              }
+                              handleLogVisit();
+                            }}
+                          >
+                            <ClipboardCheck className="w-4 h-4" />
+                            Log Event
+                          </Button>
+                        </span>
+                      </TooltipTrigger>
+                      {!canLog && (
+                        <TooltipContent>
+                          <p>{disabledReason}</p>
+                        </TooltipContent>
+                      )}
+                    </Tooltip>
+                  </TooltipProvider>
+                </div>
+
+                {accountEvents.length > 0 && (
+                  <div className="space-y-2">
+                    <h4 className="text-xs font-semibold text-muted-foreground uppercase tracking-wider">Recent Activity</h4>
+                    <div className="space-y-1.5">
+                      {accountEvents.map((ev) => {
+                        const synced = !!ev.hubspot_id;
+                        const isRetrying = retryEventSync.isPending && retryEventSync.variables?.eventId === ev.id;
+                        const ageMs = now - new Date(ev.created_at).getTime();
+                        const inGrace = !synced && ageMs < SYNC_GRACE_MS;
+                        return (
+                          <div key={ev.id} className="flex items-center justify-between gap-2 bg-muted/50 rounded-lg p-2">
+                            <div className="min-w-0 flex-1">
+                              <p className="text-xs font-medium truncate">{ev.event_type}</p>
+                              <p className="text-[11px] text-muted-foreground truncate">
+                                {format(new Date(ev.start_at), 'MMM d, h:mm a')} · {ev.assigned_to}
+                              </p>
+                            </div>
+                            {synced ? (
+                              <span className="inline-flex items-center gap-1 text-[11px] text-status-active flex-shrink-0">
+                                <Check className="w-3.5 h-3.5" /> Synced
+                              </span>
+                            ) : inGrace || isRetrying ? (
+                              <span className="inline-flex items-center gap-1 text-[11px] text-muted-foreground flex-shrink-0">
+                                <Clock className="w-3.5 h-3.5 animate-pulse" /> Syncing…
+                              </span>
+                            ) : (
+                              <Button
+                                size="sm"
+                                variant="outline"
+                                className="h-7 px-2 text-[11px] border-destructive/40 text-destructive hover:bg-destructive/10 hover:text-destructive flex-shrink-0"
+                                disabled={isRetrying}
+                                onClick={() => retryEventSync.mutate({ eventId: ev.id, accountId: selectedAccount.id })}
+                                title={!selectedAccount.hubspotCompanyId ? 'Will create the HubSpot account and sync' : 'Retry sync'}
+                              >
+                                Retry sync
+                              </Button>
+                            )}
+                          </div>
+                        );
+                      })}
+                    </div>
+                  </div>
+                )}
+
+                {notesLoading ? (
+                  <p className="text-sm text-muted-foreground">Loading notes...</p>
+                ) : accountNotes.length === 0 ? (
+                  <p className="text-sm text-muted-foreground italic">No notes yet. Add your first visit note above.</p>
+                ) : (
+                  <div className="space-y-2">
+                    {accountNotes.map((note) => (
+                      <div key={note.id} className="bg-muted/50 rounded-xl p-3 space-y-1">
+                        <div className="flex items-center justify-between">
+                          <span className="text-xs font-medium text-foreground">{note.author_name}</span>
+                          <div className="flex items-center gap-1">
+                            <span className="text-xs text-muted-foreground">
+                              {format(new Date(note.created_at), 'MMM d, yyyy h:mm a')}
+                            </span>
+                            {user && note.author_user_id === user.id && (
+                              <>
+                                {editingNoteId === note.id ? (
+                                  <button
+                                    onClick={() => {
+                                      if (!selectedAccount) return;
+                                      updateNoteMutation.mutate({
+                                        noteId: note.id,
+                                        noteText: editingNoteText.trim(),
+                                        accountId: selectedAccount.id,
+                                      }, {
+                                        onSuccess: () => {
+                                          setEditingNoteId(null);
+                                          setEditingNoteText('');
+                                        },
+                                      });
+                                    }}
+                                    disabled={!editingNoteText.trim() || updateNoteMutation.isPending}
+                                    className="p-1 rounded hover:bg-muted transition-colors text-primary"
+                                  >
+                                    <Check className="w-3.5 h-3.5" />
+                                  </button>
+                                ) : (
+                                  <button
+                                    onClick={() => {
+                                      setEditingNoteId(note.id);
+                                      setEditingNoteText(note.note_text);
+                                    }}
+                                    className="p-1 rounded hover:bg-muted transition-colors text-muted-foreground hover:text-foreground"
+                                  >
+                                    <Pencil className="w-3.5 h-3.5" />
+                                  </button>
+                                )}
+                                <button
+                                  onClick={() => {
+                                    if (!selectedAccount) return;
+                                    deleteNoteMutation.mutate({ noteId: note.id, accountId: selectedAccount.id });
+                                  }}
+                                  disabled={deleteNoteMutation.isPending}
+                                  className="p-1 rounded hover:bg-destructive/10 transition-colors text-muted-foreground hover:text-destructive"
+                                >
+                                  <Trash2 className="w-3.5 h-3.5" />
+                                </button>
+                              </>
+                            )}
+                          </div>
+                        </div>
+                        {editingNoteId === note.id ? (
+                          <Textarea
+                            value={editingNoteText}
+                            onChange={(e) => setEditingNoteText(e.target.value)}
+                            className="min-h-[60px] resize-none text-sm"
+                            autoFocus
+                          />
+                        ) : (
+                          <p className="text-sm whitespace-pre-wrap">{note.note_text}</p>
+                        )}
+                      </div>
+                    ))}
+                  </div>
+                )}
+              </div>
+
+              {/* Legacy Notes (QB "Company" column, rolled up over visits) */}
+              {selectedAccount.accountNotes && (
+                <div className="space-y-2">
+                  <h3 className="text-sm font-semibold text-muted-foreground uppercase tracking-wider">
+                    Legacy Notes
+                  </h3>
+                  <div className="bg-muted/50 rounded-xl p-3">
+                    <p className="text-sm whitespace-pre-wrap">{selectedAccount.accountNotes}</p>
+                  </div>
+                </div>
+              )}
+
+            </div>
+
+            {/* Footer Actions */}
+            <div className="p-4 border-t bg-card safe-bottom space-y-3">
+              <Button
+                variant="outline"
+                className="w-full gap-2 border-status-active/40 text-status-active hover:bg-status-active/10 hover:text-status-active"
+                onClick={() => openAroundMeWithOrigin({ kind: 'account', accountId: selectedAccount.id })}
+                disabled={isPreview}
+              >
+                <Binoculars className="w-4 h-4" />
+                Search around this account
+              </Button>
+              <Button
+                variant="outline"
+                className="w-full gap-2"
+                onClick={() => window.open(`https://maps.google.com/?q=${encodeURIComponent(selectedAccount.routeAddress ?? '')}`, '_blank')}
+              >
+                <MapPin className="w-4 h-4" />
+                Directions
+              </Button>
+
+              {/* Delete Button */}
+              {!isPreview && (
+              <AlertDialog>
+                <AlertDialogTrigger asChild>
+                  <Button
+                    variant="ghost"
+                    className="w-full gap-2 text-destructive hover:text-destructive hover:bg-destructive/10"
+                  >
+                    <Trash2 className="w-4 h-4" />
+                    Delete Account
+                  </Button>
+                </AlertDialogTrigger>
+                <AlertDialogContent>
+                  <AlertDialogHeader>
+                    <AlertDialogTitle>Delete this account?</AlertDialogTitle>
+                    <AlertDialogDescription>
+                      Are you sure you want to delete <strong>{selectedAccount.accountName}</strong>?
+                      This action cannot be undone and all associated data will be permanently removed.
+                    </AlertDialogDescription>
+                  </AlertDialogHeader>
+                  <AlertDialogFooter>
+                    <AlertDialogCancel>Cancel</AlertDialogCancel>
+                    <AlertDialogAction
+                      onClick={handleDeleteAccount}
+                      disabled={isDeleting}
+                      className="bg-destructive text-destructive-foreground hover:bg-destructive/90"
+                    >
+                      {isDeleting ? 'Deleting...' : 'Delete'}
+                    </AlertDialogAction>
+                  </AlertDialogFooter>
+                </AlertDialogContent>
+              </AlertDialog>
+              )}
+            </div>
+          </motion.div>
+        </>
+      )}
+    </AnimatePresence>
+  );
+}
