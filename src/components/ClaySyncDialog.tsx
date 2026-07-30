@@ -105,7 +105,7 @@ export function ClaySyncDialog() {
               <pre className="text-xs overflow-auto bg-background rounded p-2">
 {`{
   "id": "15a6af97-e88b-42e7-877a-1f43ae83c5e2",
-  "hubspot_id": "0013u00000ABC123XYZ"
+  "Email": "john@acme.com"
 }`}
               </pre>
 
@@ -130,17 +130,13 @@ export function ClaySyncDialog() {
   "Postings Per Month": 12,
   "Pay Rate": 22.50,
   "ICP Fit Score": 85,
-  "Rating": "Hot",
-  "hubspot_id": "0013u00000ABC123XYZ"
+  "Rating": "Hot"
 }`}
                </pre>
                <p className="text-xs text-muted-foreground">
                  Valid Status: Account, Active, At-Risk, Churned, Expansion, Flex Tier. Valid Rating: Hot, Warm, Cold. Valid Industry: Warehouse, Events, Food, Technology, Services, Retail, Other.
                </p>
 
-              <p className="text-xs text-muted-foreground mt-1">
-                <code>hubspot_id</code> populates the HubSpot Account ID on the account, enabling the "Open in HubSpot" link from the record tray.
-              </p>
               <p className="text-xs text-muted-foreground mt-1">
                 Multiple contacts at the same address are automatically grouped — the first synced becomes Main Contact, others appear as Secondary Contacts.
               </p>

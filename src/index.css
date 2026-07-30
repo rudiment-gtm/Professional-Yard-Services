@@ -19,8 +19,8 @@
     --popover: 0 0% 100%;
     --popover-foreground: 220 20% 10%;
 
-    /* Primary - Professional Blue */
-    --primary: 217 91% 50%;
+    /* Primary - ProYard Forest Green (from professionalyardservices.com logo) */
+    --primary: 116 92% 15%;
     --primary-foreground: 0 0% 100%;
 
     /* Secondary - Subtle gray */
@@ -32,8 +32,8 @@
     --muted-foreground: 220 10% 45%;
 
     /* Accent */
-    --accent: 217 91% 95%;
-    --accent-foreground: 217 91% 40%;
+    --accent: 116 60% 95%;
+    --accent-foreground: 116 92% 20%;
 
     /* Semantic status colors */
     --status-lead: 195 85% 45%;
@@ -52,19 +52,19 @@
     /* UI elements */
     --border: 220 14% 88%;
     --input: 220 14% 88%;
-    --ring: 217 91% 50%;
+    --ring: 116 92% 15%;
 
     --radius: 0.625rem;
 
     /* Sidebar - Dark charcoal */
     --sidebar-background: 220 20% 8%;
     --sidebar-foreground: 220 14% 90%;
-    --sidebar-primary: 217 91% 60%;
+    --sidebar-primary: 116 70% 32%;
     --sidebar-primary-foreground: 0 0% 100%;
     --sidebar-accent: 220 20% 14%;
     --sidebar-accent-foreground: 220 14% 95%;
     --sidebar-border: 220 20% 16%;
-    --sidebar-ring: 217 91% 60%;
+    --sidebar-ring: 116 70% 32%;
     --sidebar-muted: 220 14% 60%;
 
     /* Map pin colors */
@@ -94,7 +94,7 @@
     --popover: 220 20% 10%;
     --popover-foreground: 220 14% 95%;
 
-    --primary: 217 91% 60%;
+    --primary: 116 60% 40%;
     --primary-foreground: 220 20% 6%;
 
     --secondary: 220 20% 16%;
@@ -103,24 +103,24 @@
     --muted: 220 20% 14%;
     --muted-foreground: 220 14% 60%;
 
-    --accent: 217 91% 15%;
-    --accent-foreground: 217 91% 70%;
+    --accent: 116 60% 15%;
+    --accent-foreground: 116 60% 70%;
 
     --destructive: 0 62% 50%;
     --destructive-foreground: 0 0% 100%;
 
     --border: 220 20% 18%;
     --input: 220 20% 18%;
-    --ring: 217 91% 60%;
+    --ring: 116 60% 40%;
 
     --sidebar-background: 220 20% 4%;
     --sidebar-foreground: 220 14% 90%;
-    --sidebar-primary: 217 91% 60%;
+    --sidebar-primary: 116 60% 40%;
     --sidebar-primary-foreground: 0 0% 100%;
     --sidebar-accent: 220 20% 10%;
     --sidebar-accent-foreground: 220 14% 95%;
     --sidebar-border: 220 20% 12%;
-    --sidebar-ring: 217 91% 60%;
+    --sidebar-ring: 116 60% 40%;
     --sidebar-muted: 220 14% 50%;
   }
 }

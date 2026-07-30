@@ -21,7 +21,6 @@ import {
 import type { AroundMeResult } from '@/lib/aroundMeSearch';
 import { useAppStore } from '@/store/appStore';
 import { MapPin, ArrowUpDown, ArrowUp, ArrowDown, Search, X, Route, Navigation, Trash2, Filter } from 'lucide-react';
-import { useHubSpotConnection } from '@/hooks/useHubspotConnection';
 import { cn } from '@/lib/utils';
 import { Button } from '@/components/ui/button';
 import { Popover, PopoverContent, PopoverTrigger } from '@/components/ui/popover';
@@ -50,7 +49,6 @@ type SortColumn =
   | 'jobTitle'
   | 'email'
   | 'phone'
-  | 'hubspotCompanyId'
   | 'lastContactedAt';
 
 type SortDirection = 'asc' | 'desc';
@@ -104,8 +102,6 @@ function getSortValue(row: Account | AroundMeResult, column: SortColumn): string
       return isAccount ? ((row as Account).mainEmail || '') : '';
     case 'phone':
       return isAccount ? ((row as Account).mainPhone || '') : '';
-    case 'hubspotCompanyId':
-      return isAccount ? ((row as Account).hubspotCompanyId || '') : '';
     case 'lastContactedAt': {
       if (!isAccount) return -Infinity;
       const v = (row as Account).lastContactedAt;
@@ -175,7 +171,6 @@ export default function MapListView({ open, onOpenChange, accounts, allAccounts,
     const i = routeStops.findIndex((s) => s.kind === 'aroundMe' && s.id === wrapped);
     return i === -1 ? undefined : i;
   };
-  const { data: sfConnection } = useHubSpotConnection();
   const [sort, setSort] = useState<SortState>({ column: null, direction: 'asc' });
   const [searchQuery, setSearchQuery] = useState('');
   const total = accounts.length + aroundMeItems.length;
@@ -410,31 +405,6 @@ export default function MapListView({ open, onOpenChange, accounts, allAccounts,
               DASH
             )}
           </TableCell>
-          <TableCell className="whitespace-nowrap">
-            {account.hubspotCompanyId ? (
-              sfConnection?.instanceUrl ? (
-                <a
-                  href={`${sfConnection.instanceUrl}/${account.hubspotCompanyId}`}
-                  target="_blank"
-                  rel="noopener noreferrer"
-                  onClick={stop}
-                  className="text-primary hover:underline font-mono text-xs"
-                  title={`Open in HubSpot: ${account.hubspotCompanyId}`}
-                >
-                  {account.hubspotCompanyId}
-                </a>
-              ) : (
-                <span
-                  className="font-mono text-xs text-muted-foreground"
-                  title={account.hubspotCompanyId}
-                >
-                  {account.hubspotCompanyId}
-                </span>
-              )
-            ) : (
-              DASH
-            )}
-          </TableCell>
           <TableCell className="whitespace-nowrap text-muted-foreground">
             {account.lastContactedAt
               ? new Date(account.lastContactedAt).toLocaleDateString(undefined, { year: 'numeric', month: 'short', day: 'numeric' })
@@ -620,7 +590,6 @@ export default function MapListView({ open, onOpenChange, accounts, allAccounts,
                   <SortableHeader column="jobTitle">Job Title</SortableHeader>
                   <SortableHeader column="email">Email</SortableHeader>
                   <SortableHeader column="phone">Phone</SortableHeader>
-                  <SortableHeader column="hubspotCompanyId">HubSpot ID</SortableHeader>
                   <SortableHeader column="lastContactedAt">Last Contacted</SortableHeader>
                 </TableRow>
               </TableHeader>

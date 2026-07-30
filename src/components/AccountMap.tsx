@@ -23,7 +23,6 @@ import { useCreateAccountFromAroundMe } from '@/hooks/useAccounts';
 import { supabase } from '@/integrations/supabase/client';
 import { toast } from 'sonner';
 import { MAPBOX_ACCESS_TOKEN } from '@/config/mapbox';
-import { useHubSpotConnection } from '@/hooks/useHubspotConnection';
 import { attachLongPress } from '@/lib/longPress';
 
 // Pin color by service mix: full-service accounts get their own color, a
@@ -81,8 +80,6 @@ export default function AccountMap() {
     mapCenter: storeMapCenter,
   } = useAppStore();
 
-  const { data: sfConnection } = useHubSpotConnection();
-  const hubspotInstanceUrl = sfConnection?.instanceUrl ?? '';
   const createAccountFromAroundMe = useCreateAccountFromAroundMe();
   
   // Initialize map
@@ -1179,7 +1176,7 @@ export default function AccountMap() {
                 setAddAccountOpen(true);
               }}
               aria-label="Add Account"
-              className="h-9 w-9 rounded-md bg-purple-600 text-white shadow-lg inline-flex items-center justify-center hover:bg-purple-700 transition"
+              className="h-9 w-9 rounded-md bg-primary text-white shadow-lg inline-flex items-center justify-center hover:bg-primary/90 transition"
             >
               <Plus className="h-4 w-4" />
             </button>

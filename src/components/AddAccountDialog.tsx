@@ -185,23 +185,7 @@ export default function AddAccountDialog({ open, onOpenChange, coordinates, onAc
       if (error) throw error;
       if (!inserted) throw new Error('Insert succeeded but no record was returned');
 
-      // Fire-and-watch HubSpot Account sync (non-blocking for the user's save flow)
-      try {
-        const { data: sfData, error: sfErr } = await supabase.functions.invoke('hubspot-create-account', {
-          body: { account_id: inserted.id },
-        });
-        if (sfErr || (sfData && sfData.error)) {
-          const msg = sfErr?.message || sfData?.detail || sfData?.error || 'Unknown error';
-          toast.warning(`Account saved locally, HubSpot sync failed: ${msg}`, { duration: 10000 });
-        } else if (sfData?.matched) {
-          toast.success(`Account added and linked to existing HubSpot Account: ${sfData.account_name || ''}`);
-        } else {
-          toast.success('Account added and created in HubSpot!');
-        }
-      } catch (sfErr) {
-        const msg = sfErr instanceof Error ? sfErr.message : String(sfErr);
-        toast.warning(`Account saved locally, HubSpot sync failed: ${msg}`, { duration: 10000 });
-      }
+      toast.success('Account added');
 
       onAccountAdded();
       onOpenChange(false);
@@ -252,7 +236,7 @@ export default function AddAccountDialog({ open, onOpenChange, coordinates, onAc
             Add New Account
           </DialogTitle>
           <DialogDescription className="sr-only">
-            Create a new account in ProYard Sales Map and HubSpot.
+            Create a new account in ProYard Sales Map.
           </DialogDescription>
         </DialogHeader>
 

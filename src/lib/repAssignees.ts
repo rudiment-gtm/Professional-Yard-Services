@@ -1,11 +1,6 @@
-// Rep assignee names. Must match keys in ASSIGNEE_TO_SF_USER_ID
-// in supabase/functions/_shared/hubspot.ts so ownership syncs correctly.
+// Rep assignee names.
 export const REP_ASSIGNEES = [
-  'Tiffany Luke-Jones',
-  'Richard Perez',
-  'Jesse Lopez',
-  'Evan Asplund',
-  'House',
+  'Marcus Centeno',
 ] as const;
 
 export type RepAssignee = typeof REP_ASSIGNEES[number];

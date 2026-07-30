@@ -8,7 +8,7 @@ import { Label } from '@/components/ui/label';
 import { Card, CardContent, CardDescription, CardFooter, CardHeader, CardTitle } from '@/components/ui/card';
 import { Alert, AlertDescription } from '@/components/ui/alert';
 import { Tabs, TabsContent, TabsList, TabsTrigger } from '@/components/ui/tabs';
-import { MapPin, Loader2 } from 'lucide-react';
+import { Loader2 } from 'lucide-react';
 
 const ALLOWED_DOMAINS = ['proyardservices.com', 'getrudiment.com'];
 
@@ -117,9 +117,7 @@ export default function Auth() {
       <Card className="w-full max-w-md">
         <CardHeader className="text-center">
           <div className="flex justify-center mb-4">
-            <div className="w-12 h-12 bg-primary rounded-xl flex items-center justify-center">
-              <MapPin className="w-6 h-6 text-primary-foreground" />
-            </div>
+            <img src="/proyard-logo.svg" alt="Professional Yard Services" className="h-16 w-auto" />
           </div>
           <CardTitle className="text-2xl">ProYard Sales Map</CardTitle>
           <CardDescription>Internal tool for Professional Yard Services employees</CardDescription>

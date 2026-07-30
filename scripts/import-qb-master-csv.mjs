@@ -90,33 +90,43 @@ for (const col of need) {
 const dataRows = rows.slice(1).filter((r) => r.length > 1);
 console.log(`Parsed ${dataRows.length} data rows`);
 
-// Only Active-status job rows this pass (confirmed scope decision)
-const activeRows = dataRows.filter((r) => r[idx['Active Status']] === 'Active');
-console.log(`${activeRows.length} rows with Active Status = "Active"`);
+// Some entries in QB's Customer list aren't real customers — internal fleet/
+// crew/equipment tracking records that happen to live in the same list
+// (confirmed against the real data: "1 CREW".."7 CREW", "Truck 12 / Ford
+// 2008", "DAY OFF-Employee", "test customer", "Conveyors Equipment").
+const NON_CUSTOMER_PATTERNS = [
+  /^\d+\s*crew$/i,
+  /^truck\s*\d+/i,
+  /^day off/i,
+  /^\W*(test|sample|void|do not use|duplicate|delete)\b/i,
+  /equipment$/i,
+];
+function isNonCustomerName(base) {
+  return NON_CUSTOMER_PATTERNS.some((p) => p.test(base));
+}
 
-// Group by base account name (QuickBooks "Customer:Job" convention)
+// Group by base account name (QuickBooks "Customer:Job" convention), across
+// ALL rows regardless of status — an account's overall status is "active" if
+// ANY of its job rows is Active, else "canceled" (matches the confirmed rule:
+// any active job -> Active).
 const groups = new Map();
-for (const r of activeRows) {
+let excludedNonCustomer = 0;
+for (const r of dataRows) {
   const customer = r[idx['Customer']] || '';
   const base = customer.split(':')[0].trim();
   if (!base) continue;
+  if (isNonCustomerName(base)) { excludedNonCustomer++; continue; }
   if (!groups.has(base)) groups.set(base, []);
   groups.get(base).push(r);
 }
-console.log(`${groups.size} unique accounts after Customer:Job aggregation`);
+console.log(`${groups.size} unique accounts after Customer:Job aggregation (excluded ${excludedNonCustomer} non-customer rows)`);
 
-// Parses "Bill to 2"/"Ship to 2" style multi-line address blocks into
-// street / city / state / zip. QB's convention: line 1 = name, line 2 =
-// street, line 3 = "City, ST ZIP".
-function splitAddressBlock(lines) {
-  const nonEmpty = lines.filter((l) => l && l.trim());
-  if (nonEmpty.length === 0) return { street: '', city: '', state: '', zip: '' };
-  const cityStateZip = nonEmpty[nonEmpty.length - 1];
-  const street = nonEmpty.length > 1 ? nonEmpty[nonEmpty.length - 2] : '';
-  const m = cityStateZip.match(/^(.*?),\s*([A-Z]{2})\s*(\d{5}(?:-\d{4})?)?$/);
-  if (m) return { street, city: m[1].trim(), state: m[2], zip: (m[3] || '').trim() };
-  return { street, city: cityStateZip, state: '', zip: '' };
+let activeCount = 0, canceledCount = 0;
+for (const rowsInGroup of groups.values()) {
+  if (rowsInGroup.some((r) => r[idx['Active Status']] === 'Active')) activeCount++;
+  else canceledCount++;
 }
+console.log(`${activeCount} active, ${canceledCount} canceled`);
 
 function firstNonEmpty(fieldRows, col) {
   for (const r of fieldRows) {
@@ -126,29 +136,125 @@ function firstNonEmpty(fieldRows, col) {
   return '';
 }
 
+// ── Address block parsing ────────────────────────────────────────────────────
+//
+// QB's usual convention for a "Bill to"/"Ship to" block is:
+//   line 1 = recipient name, line 2 = street, line 3 = "City, ST ZIP"
+// but real data varies: an extra note line ("C/O...", "Attn:...", a contact
+// name+phone) can appear before the street, states are sometimes spelled out
+// ("Utah"), spaced ("U T"), missing a comma, or missing the zip entirely.
+// Naively assuming a fixed line count mis-parses these — this scans backward
+// for the line that actually looks like a city/state/zip, rather than
+// assuming it's always the last line minus one.
+
+const US_STATE_ABBR = new Set([
+  'AL','AK','AZ','AR','CA','CO','CT','DE','FL','GA','HI','ID','IL','IN','IA','KS',
+  'KY','LA','ME','MD','MA','MI','MN','MS','MO','MT','NE','NV','NH','NJ','NM','NY',
+  'NC','ND','OH','OK','OR','PA','RI','SC','SD','TN','TX','UT','VT','VA','WA','WV',
+  'WI','WY','DC',
+]);
+const US_STATE_NAMES = {
+  alabama:'AL', alaska:'AK', arizona:'AZ', arkansas:'AR', california:'CA', colorado:'CO',
+  connecticut:'CT', delaware:'DE', florida:'FL', georgia:'GA', hawaii:'HI', idaho:'ID',
+  illinois:'IL', indiana:'IN', iowa:'IA', kansas:'KS', kentucky:'KY', louisiana:'LA',
+  maine:'ME', maryland:'MD', massachusetts:'MA', michigan:'MI', minnesota:'MN',
+  mississippi:'MS', missouri:'MO', montana:'MT', nebraska:'NE', nevada:'NV',
+  'new hampshire':'NH', 'new jersey':'NJ', 'new mexico':'NM', 'new york':'NY',
+  'north carolina':'NC', 'north dakota':'ND', ohio:'OH', oklahoma:'OK', oregon:'OR',
+  pennsylvania:'PA', 'rhode island':'RI', 'south carolina':'SC', 'south dakota':'SD',
+  tennessee:'TN', texas:'TX', utah:'UT', vermont:'VT', virginia:'VA', washington:'WA',
+  'west virginia':'WV', wisconsin:'WI', wyoming:'WY', 'district of columbia':'DC',
+};
+
+function normalizeStateToken(raw) {
+  const compact = raw.replace(/\./g, '').replace(/\s+/g, '').toUpperCase();
+  if (US_STATE_ABBR.has(compact)) return compact;
+  const lower = raw.replace(/\./g, '').trim().toLowerCase();
+  return US_STATE_NAMES[lower] || null;
+}
+
+// Tries to parse a single line as "City, ST ZIP" (comma/zip/period-spacing optional).
+function parseCityStateZipLine(line) {
+  let rest = line.trim().replace(/,$/, '');
+  let zip = '';
+  const zipMatch = rest.match(/(\d{5})(?:-\d{4})?\s*$/);
+  if (zipMatch) {
+    zip = zipMatch[1];
+    rest = rest.slice(0, zipMatch.index).trim().replace(/,$/, '').trim();
+  }
+  if (!rest) return null;
+  const words = rest.split(/\s+/);
+  for (const wordCount of [2, 1]) {
+    if (words.length <= wordCount) continue;
+    const candidate = words.slice(-wordCount).join(' ');
+    const state = normalizeStateToken(candidate);
+    if (!state) continue;
+    const city = words.slice(0, -wordCount).join(' ').replace(/,$/, '').trim();
+    if (city) return { city, state, zip };
+  }
+  return null;
+}
+
+// Parses one row's own "Bill to"/"Ship to" block (lines 2-5; line 1 is the
+// recipient name and is skipped) by scanning backward for the city/state/zip
+// line, so extra note lines before the street don't shift everything.
+function parseAddressLines(lines) {
+  const nonEmpty = lines.filter((l) => l && l.trim());
+  if (nonEmpty.length === 0) return { street: '', city: '', state: '', zip: '' };
+  for (let i = nonEmpty.length - 1; i >= 0; i--) {
+    const parsed = parseCityStateZipLine(nonEmpty[i]);
+    if (parsed) {
+      const street = i > 0 ? nonEmpty[i - 1] : '';
+      return { street, ...parsed };
+    }
+  }
+  // No line parsed as city/state/zip — fall back to last-two-lines guess
+  // rather than losing the address entirely.
+  const cityStateZip = nonEmpty[nonEmpty.length - 1];
+  const street = nonEmpty.length > 1 ? nonEmpty[nonEmpty.length - 2] : '';
+  return { street, city: cityStateZip, state: '', zip: '' };
+}
+
+// Picks the first row in `groupRows` (in the given order) that actually has
+// address data in this block (Bill to/Ship to 2-5), then parses THAT row's
+// own lines together — never mixes line 2 from one job row with line 3 from
+// a different one, which matters for accounts with several distinct job-site
+// addresses (e.g. property managers with many different serviced properties).
+function extractAddressBlock(groupRows, prefix) {
+  for (const r of groupRows) {
+    const lines = [2, 3, 4, 5].map((n) => (r[idx[`${prefix} ${n}`]] || '').trim());
+    if (lines.some(Boolean)) return parseAddressLines(lines);
+  }
+  return { street: '', city: '', state: '', zip: '' };
+}
+
 const accounts = [];
 for (const [base, groupRows] of groups) {
+  const isActive = groupRows.some((r) => r[idx['Active Status']] === 'Active');
+
   const servicesSet = new Set();
   for (const r of groupRows) {
     const jt = r[idx['Job Type']] || '';
     if (jt) for (const s of jobTypeToServices(jt)) servicesSet.add(s);
   }
 
-  const billTo = splitAddressBlock([
-    firstNonEmpty(groupRows, 'Bill to 2'),
-    firstNonEmpty(groupRows, 'Bill to 3'),
-  ]);
-  const shipTo = splitAddressBlock([
-    firstNonEmpty(groupRows, 'Ship to 2'),
-    firstNonEmpty(groupRows, 'Ship to 3'),
-  ]);
+  // Prefer an active job row's address (where the account currently needs
+  // service) over a canceled one, when the account has both.
+  const activeFirst = [...groupRows].sort((a, b) => {
+    const aActive = a[idx['Active Status']] === 'Active' ? 0 : 1;
+    const bActive = b[idx['Active Status']] === 'Active' ? 0 : 1;
+    return aActive - bActive;
+  });
+
+  const billTo = extractAddressBlock(activeFirst, 'Bill to');
+  const shipTo = extractAddressBlock(activeFirst, 'Ship to');
 
   accounts.push({
     account_name: base,
     qb_customer_name: base,
     account_notes: firstNonEmpty(groupRows, 'Company') || null,
     services: [...servicesSet],
-    account_status: 'active',
+    account_status: isActive ? 'active' : 'canceled',
     billing_address: billTo.street || null,
     billing_city: billTo.city || null,
     billing_state: billTo.state || null,
@@ -184,6 +290,8 @@ for (const a of accounts) {
 console.log('Service breakdown:', serviceCounts);
 console.log(`Accounts with no address at all: ${noAddress}`);
 console.log(`Accounts with no named contact (company-only): ${noContact}`);
+const unparsedState = accounts.filter((a) => a.route_address && !a.route_state).length;
+console.log(`Accounts with a street but unparsed city/state/zip (residual parse failures): ${unparsedState}`);
 
 const sample = accounts.find((a) => a.account_name === '7-11 Daybreak');
 if (sample) console.log('Sample account (7-11 Daybreak):', JSON.stringify(sample, null, 2).slice(0, 1200));

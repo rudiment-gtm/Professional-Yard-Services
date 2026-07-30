@@ -29,7 +29,7 @@ import {
   TooltipTrigger,
 } from '@/components/ui/tooltip';
 import { useAppStore } from '@/store/appStore';
-import { statusConfig, serviceConfig, isFullService, FULL_SERVICE_CONFIG, AccountStatus, Account } from '@/types/account';
+import { statusConfig, serviceConfig, isFullService, FULL_SERVICE_CONFIG, AccountStatus, Account, ServiceType, ALL_SERVICE_TYPES } from '@/types/account';
 import { Button } from '@/components/ui/button';
 import { Textarea } from '@/components/ui/textarea';
 import {
@@ -58,11 +58,10 @@ import { useQueryClient } from '@tanstack/react-query';
 import { useAuthContext } from '@/components/AuthProvider';
 import { useAccountNotes, useAddNote, useUpdateNote, useDeleteNote } from '@/hooks/useAccountNotes';
 import type { AccountNote } from '@/hooks/useAccountNotes';
-import { useAccountEvents, useRetryEventSync } from '@/hooks/useAccountEvents';
-import { findAccountByAddress, useCreateAccountFromAroundMe } from '@/hooks/useAccounts';
+import { useAccountEvents } from '@/hooks/useAccountEvents';
+import { findAccountByAddress, useCreateAccountFromAroundMe, useUpdateAccountStatus } from '@/hooks/useAccounts';
 import { format } from 'date-fns';
-import { useHubSpotConnection } from '@/hooks/useHubspotConnection';
-import { HubSpotRetryButton } from '@/components/HubspotRetryButton';
+import { REP_ASSIGNEES } from '@/lib/repAssignees';
 
 // QB accounts often only have company + free-text contact fields (no named
 // person) — ~49% of source rows have no first/last name at all. Build a
@@ -81,7 +80,9 @@ export default function AccountDrawer() {
   const [editingNoteText, setEditingNoteText] = useState('');
   const [eventType, setEventType] = useState<string>('');
   const [eventMedium, setEventMedium] = useState<string>('');
-  const [assignedTo, setAssignedTo] = useState<string>('');
+  const [assignedTo, setAssignedTo] = useState<string>(REP_ASSIGNEES[0]);
+  const [quoteServices, setQuoteServices] = useState<ServiceType[]>([]);
+  const [quotePrice, setQuotePrice] = useState<string>('');
 
   const eventMediumOptions = ['In-Person', 'Phone Call', 'Video Call', 'Email', 'Text', 'Other'];
 
@@ -93,6 +94,7 @@ export default function AccountDrawer() {
   const [endTime, setEndTime] = useState<string>(toHHMM(new Date(Date.now() + 30 * 60 * 1000)));
 
   const eventTypeOptions = [
+    'Quote Created',
     'Call',
     'Drop By',
     'Follow up',
@@ -108,13 +110,7 @@ export default function AccountDrawer() {
     'Freshdesk Ticket',
   ];
 
-  const assignedToOptions = [
-    'Tiffany Luke-Jones',
-    'Richard Perez',
-    'Jesse Lopez',
-    'Evan Asplund',
-    'House',
-  ];
+  const assignedToOptions = REP_ASSIGNEES;
   const queryClient = useQueryClient();
   const { user, profile } = useAuthContext();
   const isPreview = !!selectedAccount?.isAroundMePreview;
@@ -123,26 +119,9 @@ export default function AccountDrawer() {
   const addNoteMutation = useAddNote();
   const updateNoteMutation = useUpdateNote();
   const deleteNoteMutation = useDeleteNote();
-  const { data: hubspotConnection } = useHubSpotConnection();
   const { data: accountEvents = [] } = useAccountEvents(realAccountId);
-  const retryEventSync = useRetryEventSync();
   const createAccountFromAroundMe = useCreateAccountFromAroundMe();
-
-  const [now, setNow] = useState(() => Date.now());
-
-  const SYNC_GRACE_MS = 60_000;
-  const hasPendingSync = accountEvents.some(
-    (ev) => !ev.hubspot_id && Date.now() - new Date(ev.created_at).getTime() < SYNC_GRACE_MS + 5_000,
-  );
-
-  useEffect(() => {
-    if (!hasPendingSync) return;
-    const tick = setInterval(() => {
-      setNow(Date.now());
-      queryClient.invalidateQueries({ queryKey: ['account_events', selectedAccount?.id] });
-    }, 10_000);
-    return () => clearInterval(tick);
-  }, [hasPendingSync, selectedAccount?.id, queryClient]);
+  const updateAccountStatusMutation = useUpdateAccountStatus();
 
   // Reset event log times to current local time whenever drawer opens
   useEffect(() => {
@@ -167,12 +146,16 @@ export default function AccountDrawer() {
   };
   const startAt = combineDateTime(startDate, startTime);
   const endAt = combineDateTime(endDate, endTime);
+  const isQuoteCreated = eventType === 'Quote Created';
+  const quotePriceNum = parseFloat(quotePrice);
   const missingFields: string[] = [];
   if (!eventType) missingFields.push('Event Type');
   if (!eventMedium) missingFields.push('Event Medium');
   if (!assignedTo) missingFields.push('Assigned To');
   if (!startDate || !startTime) missingFields.push('Start');
   if (!endDate || !endTime) missingFields.push('End');
+  if (isQuoteCreated && quoteServices.length === 0) missingFields.push('Service(s) Quoted');
+  if (isQuoteCreated && (!quotePrice || Number.isNaN(quotePriceNum) || quotePriceNum <= 0)) missingFields.push('Price (USD)');
   const endBeforeStart = !!(startAt && endAt && endAt < startAt);
   const canLog = missingFields.length === 0 && !endBeforeStart;
   const disabledReason = !canLog
@@ -250,13 +233,18 @@ export default function AccountDrawer() {
     const evType = eventType;
     const evMedium = eventMedium;
     const assignee = assignedTo;
+    const evIsQuoteCreated = isQuoteCreated;
+    const evQuoteServices = quoteServices;
+    const evQuotePrice = quotePriceNum;
     const startIso = startAt.toISOString();
     const endIso = endAt.toISOString();
     setVisitNotes('');
-    
+
     setEventType('');
     setEventMedium('');
-    setAssignedTo('');
+    setAssignedTo(REP_ASSIGNEES[0]);
+    setQuoteServices([]);
+    setQuotePrice('');
 
     try {
       const { data: evData, error } = await supabase
@@ -271,69 +259,19 @@ export default function AccountDrawer() {
           notes: noteText || null,
           author_user_id: user?.id ?? '00000000-0000-0000-0000-000000000000',
           author_name: user?.email ?? 'Unknown',
+          ...(evIsQuoteCreated ? { quote_services: evQuoteServices, quote_price_usd: evQuotePrice } : {}),
         })
         .select()
         .single();
       if (error) throw error;
       if (!evData) throw new Error('Event was not created');
-      const ev = evData as { id: string };
-      queryClient.invalidateQueries({ queryKey: ['account_events', effectiveAccount.id] });
-      const retrySync = async (eventId: string) => {
-        try {
-          const { data: retryData, error: retryErr } = await supabase.functions.invoke('hubspot-sync-event', { body: { event_id: eventId } });
-          if (retryErr) throw retryErr;
-          queryClient.invalidateQueries({ queryKey: ['account_events', effectiveAccount.id] });
-          if (retryData?.ok === false && retryData?.reason === 'missing_hubspot_id') {
-            toast.warning('Link this account to a HubSpot account to enable sync.');
-          } else {
-            toast.success('Synced to HubSpot');
-          }
-        } catch {
-          toast.error('Sync failed again', {
-            action: { label: 'Retry', onClick: () => retrySync(eventId) },
-          });
-        }
-      };
-      // If the account has no HubSpot Account yet, create or link one first
-      // so the event attaches to the correct record (with dedup by email/address/name+city).
-      let hasHubSpot = !!effectiveAccount.hubspotCompanyId;
-      if (!hasHubSpot) {
-        try {
-          const { data: createData, error: createErr } = await supabase.functions.invoke(
-            'hubspot-create-account',
-            { body: { account_id: effectiveAccount.id } },
-          );
-          if (createErr) throw createErr;
-          if (createData?.hubspot_account_id) {
-            hasHubSpot = true;
-            // Reflect the new HubSpot id locally so the drawer shows it and future syncs skip creation
-            useAppStore.setState((s) => ({
-              accounts: s.accounts.map((l) => l.id === effectiveAccount.id ? { ...l, hubspotCompanyId: createData.hubspot_account_id } : l),
-              selectedAccount: s.selectedAccount?.id === effectiveAccount.id
-                ? { ...s.selectedAccount, hubspotCompanyId: createData.hubspot_account_id }
-                : s.selectedAccount,
-            }));
-            queryClient.invalidateQueries({ queryKey: ['accounts'] });
-            toast.success(createData.matched ? 'Linked to existing HubSpot account' : 'Created new HubSpot account');
-          }
-        } catch (sfErr) {
-          console.error('HubSpot account create/link failed', sfErr);
-          toast.warning('Event saved locally. Could not create a HubSpot account to sync to.');
-        }
-      }
-
-
-      const { data: syncData, error: syncErr } = await supabase.functions.invoke('hubspot-sync-event', { body: { event_id: ev.id } });
-      if (syncErr) {
-        toast.warning('Event saved. HubSpot sync failed.', {
-          action: { label: 'Retry sync', onClick: () => retrySync(ev.id) },
-          duration: 10000,
-        });
-      } else if (syncData?.ok === false && syncData?.reason === 'missing_hubspot_id') {
-        toast.warning('Event saved locally. Link this account to a HubSpot account to enable sync.');
+      const ev = evData as { id: string; quote_number?: string | null };
+      if (evIsQuoteCreated && ev.quote_number) {
+        toast.success(`Quote logged: ${ev.quote_number}`);
       } else {
-        toast.success('Event logged & synced to HubSpot');
+        toast.success('Event logged');
       }
+      queryClient.invalidateQueries({ queryKey: ['account_events', effectiveAccount.id] });
     } catch (e) {
       console.error('Log event error', e);
       toast.error('Failed to log event');
@@ -446,29 +384,6 @@ export default function AccountDrawer() {
                   ) : (
                     <span className="text-xs text-muted-foreground">No services</span>
                   )}
-                  {selectedAccount.hubspotCompanyId ? (
-                    hubspotConnection?.instanceUrl ? (
-                      <a
-                        href={`${hubspotConnection.instanceUrl}/${selectedAccount.hubspotCompanyId}`}
-                        target="_blank"
-                        rel="noopener noreferrer"
-                        title={`Open in HubSpot: ${selectedAccount.hubspotCompanyId}`}
-                        className="inline-flex items-center gap-1 text-xs text-muted-foreground hover:text-primary transition-colors"
-                      >
-                        HubSpot: {selectedAccount.hubspotCompanyId.slice(0, 6)}…
-                        <ExternalLink className="w-3 h-3" />
-                      </a>
-                    ) : (
-                      <span
-                        title={selectedAccount.hubspotCompanyId}
-                        className="text-xs text-muted-foreground"
-                      >
-                        HubSpot: {selectedAccount.hubspotCompanyId.slice(0, 6)}…
-                      </span>
-                    )
-                  ) : (!isPreview && (
-                    <HubSpotRetryButton accountId={selectedAccount.id} />
-                  ))}
                 </div>
               </div>
               <button
@@ -478,14 +393,14 @@ export default function AccountDrawer() {
                 <X className="w-5 h-5" />
               </button>
             </div>
-            
+
             {/* Content */}
             <div className="flex-1 overflow-y-auto p-4 space-y-6 scrollbar-hide safe-bottom">
               {isPreview && (
                 <div className="flex items-start gap-2 p-3 rounded-lg bg-pink-500/10 border border-pink-500/30 text-xs text-pink-700 dark:text-pink-300">
                   <Info className="w-4 h-4 flex-shrink-0 mt-0.5" />
                   <span>
-                    <strong>Not yet saved.</strong> Logging an event will check for an existing account at this address; if none exists, it will create a new account and sync it to HubSpot.
+                    <strong>Not yet saved.</strong> Logging an event will check for an existing account at this address; if none exists, it will create a new account.
                   </span>
                 </div>
               )}
@@ -713,7 +628,20 @@ export default function AccountDrawer() {
                 </h3>
                 <Select
                   value={selectedAccount.accountStatus}
-                  onValueChange={(value) => updateAccountStatus(selectedAccount.id, value as AccountStatus)}
+                  onValueChange={(value) => {
+                    const newStatus = value as AccountStatus;
+                    const previousStatus = selectedAccount.accountStatus;
+                    updateAccountStatus(selectedAccount.id, newStatus); // optimistic UI update
+                    updateAccountStatusMutation.mutate(
+                      { accountId: selectedAccount.id, status: newStatus },
+                      {
+                        onError: (err) => {
+                          updateAccountStatus(selectedAccount.id, previousStatus); // revert on failure
+                          toast.error(`Failed to update status: ${err instanceof Error ? err.message : 'unknown error'}`);
+                        },
+                      },
+                    );
+                  }}
                   disabled={isPreview}
                 >
                   <SelectTrigger className="w-full">
@@ -755,6 +683,55 @@ export default function AccountDrawer() {
                   </SelectContent>
                 </Select>
               </div>
+
+              {/* Quote Created — service(s) quoted + price */}
+              {isQuoteCreated && (
+                <>
+                  <div className="space-y-2 pb-[15px]">
+                    <h3 className="text-sm font-semibold text-muted-foreground uppercase tracking-wider">
+                      <span className="text-destructive">*</span> Service(s) Quoted
+                    </h3>
+                    <div className="flex flex-wrap gap-2">
+                      {ALL_SERVICE_TYPES.map((s) => {
+                        const active = quoteServices.includes(s);
+                        return (
+                          <button
+                            type="button"
+                            key={s}
+                            onClick={() =>
+                              setQuoteServices((prev) =>
+                                prev.includes(s) ? prev.filter((x) => x !== s) : [...prev, s],
+                              )
+                            }
+                            className="px-2.5 py-1 rounded-full text-xs font-medium border transition-colors"
+                            style={
+                              active
+                                ? { backgroundColor: `${serviceConfig[s].color}20`, borderColor: serviceConfig[s].color, color: serviceConfig[s].color }
+                                : { backgroundColor: 'transparent', borderColor: 'hsl(var(--border))', color: 'hsl(var(--muted-foreground))' }
+                            }
+                          >
+                            {serviceConfig[s].label}
+                          </button>
+                        );
+                      })}
+                    </div>
+                  </div>
+
+                  <div className="space-y-2 pb-[15px]">
+                    <h3 className="text-sm font-semibold text-muted-foreground uppercase tracking-wider">
+                      <span className="text-destructive">*</span> Price (USD)
+                    </h3>
+                    <Input
+                      type="number"
+                      min="0"
+                      step="0.01"
+                      placeholder="0.00"
+                      value={quotePrice}
+                      onChange={(e) => setQuotePrice(e.target.value)}
+                    />
+                  </div>
+                </>
+              )}
 
               {/* Event Medium */}
               <div className="space-y-2 pb-[15px]">
@@ -903,12 +880,6 @@ export default function AccountDrawer() {
                   Notes
                 </h3>
                 <div className="space-y-2">
-                  {!selectedAccount.hubspotCompanyId && (
-                    <div className="flex items-start gap-2 p-2 rounded-lg bg-amber-500/10 border border-amber-500/30 text-xs text-amber-700 dark:text-amber-300">
-                      <Info className="w-3.5 h-3.5 flex-shrink-0 mt-0.5" />
-                      <span>This account isn't linked to a HubSpot account. Events can be logged but won't sync.</span>
-                    </div>
-                  )}
                   <Textarea
                     placeholder="What happened during this visit?"
                     value={visitNotes}
@@ -949,42 +920,22 @@ export default function AccountDrawer() {
                   <div className="space-y-2">
                     <h4 className="text-xs font-semibold text-muted-foreground uppercase tracking-wider">Recent Activity</h4>
                     <div className="space-y-1.5">
-                      {accountEvents.map((ev) => {
-                        const synced = !!ev.hubspot_id;
-                        const isRetrying = retryEventSync.isPending && retryEventSync.variables?.eventId === ev.id;
-                        const ageMs = now - new Date(ev.created_at).getTime();
-                        const inGrace = !synced && ageMs < SYNC_GRACE_MS;
-                        return (
-                          <div key={ev.id} className="flex items-center justify-between gap-2 bg-muted/50 rounded-lg p-2">
-                            <div className="min-w-0 flex-1">
-                              <p className="text-xs font-medium truncate">{ev.event_type}</p>
-                              <p className="text-[11px] text-muted-foreground truncate">
-                                {format(new Date(ev.start_at), 'MMM d, h:mm a')} · {ev.assigned_to}
-                              </p>
-                            </div>
-                            {synced ? (
-                              <span className="inline-flex items-center gap-1 text-[11px] text-status-active flex-shrink-0">
-                                <Check className="w-3.5 h-3.5" /> Synced
-                              </span>
-                            ) : inGrace || isRetrying ? (
-                              <span className="inline-flex items-center gap-1 text-[11px] text-muted-foreground flex-shrink-0">
-                                <Clock className="w-3.5 h-3.5 animate-pulse" /> Syncing…
-                              </span>
-                            ) : (
-                              <Button
-                                size="sm"
-                                variant="outline"
-                                className="h-7 px-2 text-[11px] border-destructive/40 text-destructive hover:bg-destructive/10 hover:text-destructive flex-shrink-0"
-                                disabled={isRetrying}
-                                onClick={() => retryEventSync.mutate({ eventId: ev.id, accountId: selectedAccount.id })}
-                                title={!selectedAccount.hubspotCompanyId ? 'Will create the HubSpot account and sync' : 'Retry sync'}
-                              >
-                                Retry sync
-                              </Button>
-                            )}
-                          </div>
-                        );
-                      })}
+                      {accountEvents.map((ev) => (
+                        <div key={ev.id} className="bg-muted/50 rounded-lg p-2">
+                          <p className="text-xs font-medium truncate">{ev.event_type}</p>
+                          <p className="text-[11px] text-muted-foreground truncate">
+                            {format(new Date(ev.start_at), 'MMM d, h:mm a')} · {ev.assigned_to}
+                          </p>
+                          {ev.event_type === 'Quote Created' && (
+                            <p className="text-[11px] text-muted-foreground truncate mt-0.5">
+                              {ev.quote_number}
+                              {ev.quote_price_usd != null && ` · $${ev.quote_price_usd.toLocaleString()}`}
+                              {ev.quote_services && ev.quote_services.length > 0 &&
+                                ` · ${ev.quote_services.map((s) => serviceConfig[s as ServiceType]?.label ?? s).join(', ')}`}
+                            </p>
+                          )}
+                        </div>
+                      ))}
                     </div>
                   </div>
                 )}

@@ -8,25 +8,8 @@ export interface AccountNote {
   note_text: string;
   author_name: string;
   author_user_id: string;
-  hubspot_synced: boolean;
   created_at: string;
 }
-
-const syncToHubSpot = async (noteId: string, _accountId: string, action: 'create' | 'update' | 'delete' = 'create'): Promise<{ ok: boolean; missingHubSpotId?: boolean }> => {
-  // Only push creates for now; update/delete sync can be added later.
-  if (action !== 'create') return { ok: true };
-  try {
-    const { data, error } = await supabase.functions.invoke('hubspot-sync-note', { body: { note_id: noteId } });
-    if (error) throw error;
-    if (data?.ok === false && data?.reason === 'missing_hubspot_id') {
-      return { ok: false, missingHubSpotId: true };
-    }
-    return { ok: !!data?.ok };
-  } catch (e) {
-    console.warn('HubSpot sync-note failed:', e);
-    return { ok: false };
-  }
-};
 
 export function useAccountNotes(accountId: string | undefined) {
   return useQuery<AccountNote[]>({
@@ -68,17 +51,9 @@ export function useAddNote() {
       if (error) throw error;
       return data as AccountNote;
     },
-    onSuccess: async (data) => {
+    onSuccess: (data) => {
       queryClient.invalidateQueries({ queryKey: ['account_notes', data.account_id] });
-      
-      const result = await syncToHubSpot(data.id, data.account_id, 'create');
-      if (!result.ok) {
-        if (result.missingHubSpotId) {
-          toast.warning('Note saved locally. Link this account to a HubSpot account to enable sync.');
-        } else {
-          toast.warning('Note saved. HubSpot sync will retry.');
-        }
-      }
+      toast.success('Note saved');
     },
     onError: () => {
       toast.error('Failed to save note');
@@ -104,14 +79,9 @@ export function useUpdateNote() {
       if (error) throw error;
       return { ...data, account_id: accountId } as AccountNote;
     },
-    onSuccess: async (data) => {
+    onSuccess: (data) => {
       queryClient.invalidateQueries({ queryKey: ['account_notes', data.account_id] });
       toast.success('Note updated');
-
-      const result = await syncToHubSpot(data.id, data.account_id, 'update');
-      if (!result.ok) {
-        toast.warning('HubSpot sync will retry.');
-      }
     },
     onError: () => {
       toast.error('Failed to update note');
@@ -131,14 +101,9 @@ export function useDeleteNote() {
       if (error) throw error;
       return { noteId, accountId };
     },
-    onSuccess: async ({ noteId, accountId }) => {
+    onSuccess: ({ accountId }) => {
       queryClient.invalidateQueries({ queryKey: ['account_notes', accountId] });
       toast.success('Note deleted');
-
-      const result = await syncToHubSpot(noteId, accountId, 'delete');
-      if (!result.ok) {
-        toast.warning('HubSpot sync will retry.');
-      }
     },
     onError: () => {
       toast.error('Failed to delete note');

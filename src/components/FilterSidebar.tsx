@@ -158,7 +158,7 @@ export default function FilterSidebar() {
                 <button
                   onClick={openAddAccountManual}
                   title="Add Account"
-                  className="touch-button rounded-lg bg-purple-600 text-white hover:bg-purple-700 transition-all"
+                  className="touch-button rounded-lg bg-primary text-white hover:bg-primary/90 transition-all"
                 >
                   <Plus className="w-5 h-5" />
                 </button>
@@ -199,7 +199,7 @@ export default function FilterSidebar() {
                     <button
                       onClick={openAddAccountManual}
                       aria-label="Add Account"
-                      className="touch-button flex-1 h-11 rounded-lg bg-purple-600 text-white hover:bg-purple-700 transition-all inline-flex items-center justify-center"
+                      className="touch-button flex-1 h-11 rounded-lg bg-primary text-white hover:bg-primary/90 transition-all inline-flex items-center justify-center"
                     >
                       <Plus className="w-5 h-5" />
                     </button>

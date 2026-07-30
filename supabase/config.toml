@@ -12,3 +12,13 @@ content_path = "./supabase/templates/confirmation.html"
 
 [functions.get-mapbox-token]
 verify_jwt = false
+
+# Called only by the accounts_activated_notify trigger (internal,
+# service-to-service) — no end-user session to verify a JWT against.
+[functions.notify-n8n-status-change]
+verify_jwt = false
+
+# Called only by the account_events_quote_created_notify trigger (internal,
+# service-to-service) — no end-user session to verify a JWT against.
+[functions.notify-n8n-quote-created]
+verify_jwt = false
