@@ -78,12 +78,20 @@ Deno.serve(async (req) => {
     }
 
     const services: string[] = event.quote_services ?? [];
+    const lineItems: Record<string, number> = event.quote_line_items ?? {};
     const payload = {
       event: "quote_created",
       quote_number: event.quote_number,
       client_name: account.account_name,
       client_address: formatAddress(account),
       service_details: services.map((s) => SERVICE_LABELS[s] ?? s),
+      // Per-service price breakdown, added alongside the existing flat
+      // price_usd total so this stays backward compatible with the current
+      // n8n workflow/doc template — line_items is additive.
+      line_items: Object.entries(lineItems).map(([s, price]) => ({
+        service: SERVICE_LABELS[s] ?? s,
+        price_usd: price,
+      })),
       price_usd: event.quote_price_usd,
       account,
       account_event: event,

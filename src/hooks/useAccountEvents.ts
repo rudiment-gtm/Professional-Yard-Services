@@ -16,6 +16,7 @@ export interface AccountEvent {
   // "Quote Created" event fields — only populated when event_type === 'Quote Created'
   quote_services: string[] | null;
   quote_price_usd: number | null;
+  quote_line_items: Record<string, number> | null;
   quote_number: string | null;
 }
 

@@ -86,7 +86,7 @@ export default function AccountDrawer() {
   const [eventMedium, setEventMedium] = useState<string>('');
   const [assignedTo, setAssignedTo] = useState<string>(REP_ASSIGNEES[0]);
   const [quoteServices, setQuoteServices] = useState<ServiceType[]>([]);
-  const [quotePrice, setQuotePrice] = useState<string>('');
+  const [quotePrices, setQuotePrices] = useState<Record<string, string>>({});
   const [findingContacts, setFindingContacts] = useState(false);
   const [revealingField, setRevealingField] = useState<Record<string, 'email' | 'phone'>>({});
 
@@ -155,7 +155,16 @@ export default function AccountDrawer() {
   const startAt = combineDateTime(startDate, startTime);
   const endAt = combineDateTime(endDate, endTime);
   const isQuoteCreated = eventType === 'Quote Created';
-  const quotePriceNum = parseFloat(quotePrice);
+  const servicesMissingPrice = isQuoteCreated
+    ? quoteServices.filter((s) => {
+        const n = parseFloat(quotePrices[s] ?? '');
+        return !quotePrices[s] || Number.isNaN(n) || n <= 0;
+      })
+    : [];
+  const quoteTotalPrice = quoteServices.reduce((sum, s) => {
+    const n = parseFloat(quotePrices[s] ?? '');
+    return sum + (Number.isFinite(n) ? n : 0);
+  }, 0);
   const missingFields: string[] = [];
   if (!eventType) missingFields.push('Event Type');
   if (!eventMedium) missingFields.push('Event Medium');
@@ -163,7 +172,9 @@ export default function AccountDrawer() {
   if (!startDate || !startTime) missingFields.push('Start');
   if (!endDate || !endTime) missingFields.push('End');
   if (isQuoteCreated && quoteServices.length === 0) missingFields.push('Service(s) Quoted');
-  if (isQuoteCreated && (!quotePrice || Number.isNaN(quotePriceNum) || quotePriceNum <= 0)) missingFields.push('Price (USD)');
+  if (isQuoteCreated && servicesMissingPrice.length > 0) {
+    missingFields.push(`Price (${servicesMissingPrice.map((s) => serviceConfig[s].label).join(', ')})`);
+  }
   const endBeforeStart = !!(startAt && endAt && endAt < startAt);
   const canLog = missingFields.length === 0 && !endBeforeStart;
   const disabledReason = !canLog
@@ -243,7 +254,10 @@ export default function AccountDrawer() {
     const assignee = assignedTo;
     const evIsQuoteCreated = isQuoteCreated;
     const evQuoteServices = quoteServices;
-    const evQuotePrice = quotePriceNum;
+    const evQuoteLineItems = evIsQuoteCreated
+      ? Object.fromEntries(quoteServices.map((s) => [s, parseFloat(quotePrices[s])]))
+      : null;
+    const evQuotePrice = quoteTotalPrice;
     const startIso = startAt.toISOString();
     const endIso = endAt.toISOString();
     setVisitNotes('');
@@ -252,7 +266,7 @@ export default function AccountDrawer() {
     setEventMedium('');
     setAssignedTo(REP_ASSIGNEES[0]);
     setQuoteServices([]);
-    setQuotePrice('');
+    setQuotePrices({});
 
     try {
       const { data: evData, error } = await supabase
@@ -267,7 +281,7 @@ export default function AccountDrawer() {
           notes: noteText || null,
           author_user_id: user?.id ?? '00000000-0000-0000-0000-000000000000',
           author_name: user?.email ?? 'Unknown',
-          ...(evIsQuoteCreated ? { quote_services: evQuoteServices, quote_price_usd: evQuotePrice } : {}),
+          ...(evIsQuoteCreated ? { quote_services: evQuoteServices, quote_price_usd: evQuotePrice, quote_line_items: evQuoteLineItems } : {}),
         })
         .select()
         .single();
@@ -877,19 +891,38 @@ export default function AccountDrawer() {
                     </div>
                   </div>
 
-                  <div className="space-y-2 pb-[15px]">
-                    <h3 className="text-sm font-semibold text-muted-foreground uppercase tracking-wider">
-                      <span className="text-destructive">*</span> Price (USD)
-                    </h3>
-                    <Input
-                      type="number"
-                      min="0"
-                      step="0.01"
-                      placeholder="0.00"
-                      value={quotePrice}
-                      onChange={(e) => setQuotePrice(e.target.value)}
-                    />
-                  </div>
+                  {quoteServices.length > 0 && (
+                    <div className="space-y-2 pb-[15px]">
+                      <h3 className="text-sm font-semibold text-muted-foreground uppercase tracking-wider">
+                        <span className="text-destructive">*</span> Price per Service (USD)
+                      </h3>
+                      <div className="space-y-2">
+                        {quoteServices.map((s) => (
+                          <div key={s} className="flex items-center gap-2">
+                            <span
+                              className="text-sm flex-shrink-0 w-32 truncate"
+                              style={{ color: serviceConfig[s].color }}
+                            >
+                              {serviceConfig[s].label}
+                            </span>
+                            <Input
+                              type="number"
+                              min="0"
+                              step="0.01"
+                              placeholder="0.00"
+                              value={quotePrices[s] ?? ''}
+                              onChange={(e) => setQuotePrices((prev) => ({ ...prev, [s]: e.target.value }))}
+                            />
+                          </div>
+                        ))}
+                        {quoteServices.length > 1 && (
+                          <p className="text-xs text-muted-foreground text-right pt-0.5">
+                            Total: ${quoteTotalPrice.toLocaleString()}
+                          </p>
+                        )}
+                      </div>
+                    </div>
+                  )}
                 </>
               )}
 
@@ -1089,9 +1122,15 @@ export default function AccountDrawer() {
                           {ev.event_type === 'Quote Created' && (
                             <p className="text-[11px] text-muted-foreground truncate mt-0.5">
                               {ev.quote_number}
-                              {ev.quote_price_usd != null && ` · $${ev.quote_price_usd.toLocaleString()}`}
-                              {ev.quote_services && ev.quote_services.length > 0 &&
-                                ` · ${ev.quote_services.map((s) => serviceConfig[s as ServiceType]?.label ?? s).join(', ')}`}
+                              {ev.quote_line_items && Object.keys(ev.quote_line_items).length > 0 ? (
+                                ` · ${Object.entries(ev.quote_line_items)
+                                  .map(([s, price]) => `${serviceConfig[s as ServiceType]?.label ?? s} $${Number(price).toLocaleString()}`)
+                                  .join(', ')}`
+                              ) : (
+                                ev.quote_services && ev.quote_services.length > 0 &&
+                                ` · ${ev.quote_services.map((s) => serviceConfig[s as ServiceType]?.label ?? s).join(', ')}`
+                              )}
+                              {ev.quote_price_usd != null && ` · Total $${ev.quote_price_usd.toLocaleString()}`}
                             </p>
                           )}
                         </div>
