@@ -5,6 +5,9 @@ import FilterSidebar from '@/components/FilterSidebar';
 import AccountMap from '@/components/AccountMap';
 import AccountDrawer from '@/components/AccountDrawer';
 import MapHeader from '@/components/MapHeader';
+import ChatView from '@/components/ChatView';
+import ProspectView from '@/components/ProspectView';
+import ContactsView from '@/components/ContactsView';
 import RouteOverviewDialog from '@/components/RouteOverviewDialog';
 import { Button } from '@/components/ui/button';
 import { cn } from '@/lib/utils';
@@ -17,11 +20,11 @@ import { toast } from 'sonner';
 
 
 const Index = () => {
-  const { 
+  const {
     isSidebarOpen, setAccounts, accounts,
     isRouteModeActive, toggleRouteMode,
     routeStops, clearRouteSelection,
-    userLocation
+    userLocation, activeTab
   } = useAppStore();
   const { data: dbAccounts, isLoading } = useAccounts();
   const isMobile = useIsMobile();
@@ -51,13 +54,34 @@ const Index = () => {
         "h-full transition-all duration-300",
         isSidebarOpen ? "ml-0 md:ml-72" : "ml-0 md:ml-16"
       )}>
-        {/* Header */}
-        <MapHeader />
-        
-        {/* Map Container */}
-        <div className="h-full pt-14">
-          <AccountMap />
+        {/* Map tab — stays mounted so switching tabs never re-initializes Mapbox */}
+        <div className={cn('h-full', activeTab === 'map' ? 'block' : 'hidden')}>
+          <MapHeader />
+          <div className="h-full pt-14">
+            <AccountMap />
+          </div>
         </div>
+
+        {/* Chat tab */}
+        {activeTab === 'chat' && (
+          <div className="h-full">
+            <ChatView />
+          </div>
+        )}
+
+        {/* Prospect tab */}
+        {activeTab === 'prospect' && (
+          <div className="h-full">
+            <ProspectView />
+          </div>
+        )}
+
+        {/* Contacts tab */}
+        {activeTab === 'contacts' && (
+          <div className="h-full">
+            <ContactsView />
+          </div>
+        )}
       </div>
       
       {/* Account Detail Drawer */}

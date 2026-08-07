@@ -83,6 +83,8 @@ interface AppState {
   // UI state
   isSidebarOpen: boolean;
   isDrawerOpen: boolean;
+  activeTab: 'map' | 'chat' | 'prospect' | 'contacts';
+  setActiveTab: (tab: 'map' | 'chat' | 'prospect' | 'contacts') => void;
 
   // Map state
   mapCenter: [number, number];
@@ -182,6 +184,8 @@ export const useAppStore = create<AppState>((set, get) => ({
 
   isSidebarOpen: true,
   isDrawerOpen: false,
+  activeTab: 'map',
+  setActiveTab: (tab) => set({ activeTab: tab }),
 
   // Default map center — overridden once accounts/user location load
   mapCenter: [-97.743057, 30.267153],

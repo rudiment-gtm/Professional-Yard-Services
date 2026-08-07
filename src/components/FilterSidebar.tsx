@@ -38,6 +38,8 @@ export default function FilterSidebar() {
     setAroundMeOpen,
     aroundMeResults,
     clearAroundMeResults,
+    activeTab,
+    setActiveTab,
   } = useAppStore();
 
   const hasAroundMeResults = aroundMeResults.length > 0;
@@ -126,6 +128,31 @@ export default function FilterSidebar() {
             )}
           </div>
 
+          {/* Tabs */}
+          {isSidebarOpen && (
+            <div className="p-2 border-b border-sidebar-border grid grid-cols-2 gap-1">
+              {([
+                ['chat', 'Chat'],
+                ['map', 'Map'],
+                ['prospect', 'Prospect'],
+                ['contacts', 'Contacts'],
+              ] as const).map(([tab, label]) => (
+                <button
+                  key={tab}
+                  onClick={() => setActiveTab(tab)}
+                  className={cn(
+                    'text-sm font-medium py-1.5 rounded-md transition-colors',
+                    activeTab === tab
+                      ? 'bg-sidebar-primary text-sidebar-primary-foreground'
+                      : 'text-sidebar-muted hover:text-sidebar-foreground'
+                  )}
+                >
+                  {label}
+                </button>
+              ))}
+            </div>
+          )}
+
           {/* Stats Summary */}
           {isSidebarOpen && (
             <div className="p-4 border-b border-sidebar-border">
@@ -143,6 +170,7 @@ export default function FilterSidebar() {
           )}
 
           {/* Filters */}
+          {activeTab === 'map' && (
           <div className="flex-1 overflow-y-auto p-4 scrollbar-hide">
             {isSidebarOpen ? (
               <AdvancedFilterPanel />
@@ -189,9 +217,10 @@ export default function FilterSidebar() {
               </div>
             )}
           </div>
+          )}
 
           {/* Route Mode Panel */}
-          {isSidebarOpen && (
+          {activeTab === 'map' && isSidebarOpen && (
             <div className="p-4 border-t border-sidebar-border space-y-3">
               <div className="flex items-center justify-between gap-2">
                 <Tooltip>

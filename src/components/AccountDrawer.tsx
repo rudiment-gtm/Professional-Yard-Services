@@ -17,7 +17,9 @@ import {
   Check,
   Info,
   Binoculars,
-  Globe
+  Globe,
+  UserSearch,
+  Loader2
 } from 'lucide-react';
 import { Calendar as CalendarPicker } from '@/components/ui/calendar';
 import { Popover, PopoverContent, PopoverTrigger } from '@/components/ui/popover';
@@ -60,6 +62,8 @@ import { useAccountNotes, useAddNote, useUpdateNote, useDeleteNote } from '@/hoo
 import type { AccountNote } from '@/hooks/useAccountNotes';
 import { useAccountEvents } from '@/hooks/useAccountEvents';
 import { findAccountByAddress, useCreateAccountFromAroundMe, useUpdateAccountStatus } from '@/hooks/useAccounts';
+import { useProspectContactsForAccount, useUpsertProspectContact } from '@/hooks/useProspectContacts';
+import type { ProspectContact } from '@/hooks/useProspectContacts';
 import { format } from 'date-fns';
 import { REP_ASSIGNEES } from '@/lib/repAssignees';
 
@@ -83,6 +87,8 @@ export default function AccountDrawer() {
   const [assignedTo, setAssignedTo] = useState<string>(REP_ASSIGNEES[0]);
   const [quoteServices, setQuoteServices] = useState<ServiceType[]>([]);
   const [quotePrice, setQuotePrice] = useState<string>('');
+  const [findingContacts, setFindingContacts] = useState(false);
+  const [revealingField, setRevealingField] = useState<Record<string, 'email' | 'phone'>>({});
 
   const eventMediumOptions = ['In-Person', 'Phone Call', 'Video Call', 'Email', 'Text', 'Other'];
 
@@ -116,6 +122,8 @@ export default function AccountDrawer() {
   const isPreview = !!selectedAccount?.isAroundMePreview;
   const realAccountId = isPreview ? undefined : selectedAccount?.id;
   const { data: accountNotes = [], isLoading: notesLoading } = useAccountNotes(realAccountId);
+  const { data: savedContacts = [] } = useProspectContactsForAccount(realAccountId);
+  const upsertContact = useUpsertProspectContact();
   const addNoteMutation = useAddNote();
   const updateNoteMutation = useUpdateNote();
   const deleteNoteMutation = useDeleteNote();
@@ -298,7 +306,89 @@ export default function AccountDrawer() {
       setIsDeleting(false);
     }
   };
-  
+
+  const handleFindContacts = async () => {
+    if (!selectedAccount) return;
+    setFindingContacts(true);
+    try {
+      const { data, error } = await supabase.functions.invoke('prospeo-find-best-contact', {
+        body: { website: selectedAccount.website },
+      });
+      if (error) throw error;
+      if (data?.notConfigured) {
+        toast.warning('Contact finder isn\'t connected yet — add a PROSPEO_API_KEY to enable it.');
+        return;
+      }
+      const found = data?.contacts?.[0];
+      if (!found) {
+        toast.info('No employees found for this account.');
+        return;
+      }
+      await upsertContact.mutateAsync({
+        accountId: selectedAccount.id,
+        firstName: found.firstName,
+        lastName: found.lastName,
+        patch: { title: found.title, linkedinUrl: found.linkedinUrl, email: found.email, phone: found.phone },
+      });
+      toast.success(`Found contact: ${found.firstName} ${found.lastName}`);
+    } catch (e) {
+      toast.error(`Find Contacts failed: ${e instanceof Error ? e.message : 'unknown error'}`);
+    } finally {
+      setFindingContacts(false);
+    }
+  };
+
+  const handleRevealEmail = async (contact: ProspectContact) => {
+    setRevealingField((s) => ({ ...s, [contact.id]: 'email' }));
+    try {
+      const { data, error } = await supabase.functions.invoke('prospeo-reveal-contact', {
+        body: { field: 'email', firstName: contact.first_name, lastName: contact.last_name, website: selectedAccount?.website },
+      });
+      if (error) throw error;
+      if (data?.notConfigured) {
+        toast.warning('Contact finder isn\'t connected yet — add a PROSPEO_API_KEY to enable it.');
+        return;
+      }
+      await upsertContact.mutateAsync({
+        accountId: contact.account_id,
+        firstName: contact.first_name,
+        lastName: contact.last_name,
+        patch: { email: data?.email ?? null },
+      });
+      toast.success(data?.email ? 'Email revealed' : 'No email found');
+    } catch (e) {
+      toast.error(`Reveal failed: ${e instanceof Error ? e.message : 'unknown error'}`);
+    } finally {
+      setRevealingField((s) => { const n = { ...s }; delete n[contact.id]; return n; });
+    }
+  };
+
+  const handleRevealPhone = async (contact: ProspectContact) => {
+    if (!contact.email) return;
+    setRevealingField((s) => ({ ...s, [contact.id]: 'phone' }));
+    try {
+      const { data, error } = await supabase.functions.invoke('prospeo-reveal-contact', {
+        body: { field: 'phone', firstName: contact.first_name, lastName: contact.last_name, website: selectedAccount?.website },
+      });
+      if (error) throw error;
+      if (data?.notConfigured) {
+        toast.warning('Contact finder isn\'t connected yet — add a PROSPEO_API_KEY to enable it.');
+        return;
+      }
+      await upsertContact.mutateAsync({
+        accountId: contact.account_id,
+        firstName: contact.first_name,
+        lastName: contact.last_name,
+        patch: { phone: data?.phone ?? null },
+      });
+      toast.success(data?.phone ? 'Phone revealed' : 'No phone found');
+    } catch (e) {
+      toast.error(`Reveal failed: ${e instanceof Error ? e.message : 'unknown error'}`);
+    } finally {
+      setRevealingField((s) => { const n = { ...s }; delete n[contact.id]; return n; });
+    }
+  };
+
   const formatDate = (dateStr?: string) => {
     if (!dateStr) return 'Never';
     return new Date(dateStr).toLocaleDateString('en-US', {
@@ -486,6 +576,76 @@ export default function AccountDrawer() {
                   </div>
                 </div>
               </div>
+
+              {/* Contacts (found via Prospeo, persisted per account) */}
+              {!isPreview && (
+                <div className="space-y-2">
+                  <h3 className="text-sm font-semibold text-muted-foreground uppercase tracking-wider">
+                    Contacts{savedContacts.length > 0 ? ` (${savedContacts.length})` : ''}
+                  </h3>
+                  {savedContacts.map((contact) => {
+                    const revealing = revealingField[contact.id];
+                    return (
+                      <div key={contact.id} className="bg-muted/50 rounded-xl p-3 space-y-1.5">
+                        <div className="flex items-center justify-between">
+                          <div>
+                            <p className="text-sm font-medium">{contact.first_name} {contact.last_name}</p>
+                            {contact.title && <p className="text-xs text-muted-foreground">{contact.title}</p>}
+                          </div>
+                          {contact.linkedin_url && (
+                            <a
+                              href={/^https?:\/\//i.test(contact.linkedin_url) ? contact.linkedin_url : `https://${contact.linkedin_url}`}
+                              target="_blank"
+                              rel="noopener noreferrer"
+                              className="text-xs text-primary flex-shrink-0"
+                            >
+                              LinkedIn
+                            </a>
+                          )}
+                        </div>
+                        <div className="flex items-center justify-between text-xs pt-1">
+                          <span className="text-muted-foreground">Email</span>
+                          {contact.email ? (
+                            <span className="truncate max-w-[180px]">{contact.email}</span>
+                          ) : (
+                            <button
+                              onClick={() => handleRevealEmail(contact)}
+                              disabled={!!revealing}
+                              className="text-primary hover:underline disabled:opacity-60"
+                            >
+                              {revealing === 'email' ? 'Revealing…' : 'Reveal email'}
+                            </button>
+                          )}
+                        </div>
+                        <div className="flex items-center justify-between text-xs">
+                          <span className="text-muted-foreground">Mobile</span>
+                          {contact.phone ? (
+                            <span>{contact.phone}</span>
+                          ) : contact.email ? (
+                            <button
+                              onClick={() => handleRevealPhone(contact)}
+                              disabled={!!revealing}
+                              className="text-primary hover:underline disabled:opacity-60"
+                            >
+                              {revealing === 'phone' ? 'Revealing…' : 'Reveal mobile'}
+                            </button>
+                          ) : (
+                            <span className="text-muted-foreground">Reveal email first</span>
+                          )}
+                        </div>
+                      </div>
+                    );
+                  })}
+                  <button
+                    onClick={handleFindContacts}
+                    disabled={findingContacts}
+                    className="w-full inline-flex items-center justify-center gap-1.5 text-sm bg-primary/10 text-primary rounded-lg py-2 hover:bg-primary/20 transition-colors disabled:opacity-60"
+                  >
+                    {findingContacts ? <Loader2 className="w-3.5 h-3.5 animate-spin" /> : <UserSearch className="w-3.5 h-3.5" />}
+                    {findingContacts ? 'Searching…' : savedContacts.length > 0 ? 'Find another contact' : 'Find contacts'}
+                  </button>
+                </div>
+              )}
 
               {/* Secondary Contacts */}
               {secondaryContacts.length > 0 && (

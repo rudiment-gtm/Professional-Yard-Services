@@ -106,6 +106,33 @@ export interface Database {
           referencedColumns: ["id"];
         }];
       };
+      prospect_contacts: {
+        Row: {
+          id: string;
+          account_id: string;
+          first_name: string;
+          last_name: string;
+          title: string | null;
+          linkedin_url: string | null;
+          email: string | null;
+          phone: string | null;
+          created_at: string;
+          updated_at: string;
+        };
+        Insert: Partial<Database['public']['Tables']['prospect_contacts']['Row']> & {
+          account_id: string;
+          first_name: string;
+          last_name: string;
+        };
+        Update: Partial<Database['public']['Tables']['prospect_contacts']['Row']>;
+        Relationships: [{
+          foreignKeyName: "prospect_contacts_account_id_fkey";
+          columns: ["account_id"];
+          isOneToOne: false;
+          referencedRelation: "accounts";
+          referencedColumns: ["id"];
+        }];
+      };
       account_events: {
         Row: {
           id: string;
