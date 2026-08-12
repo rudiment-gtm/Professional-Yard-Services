@@ -4,7 +4,6 @@ import 'mapbox-gl/dist/mapbox-gl.css';
 import { useAppStore, useFilteredAccounts } from '@/store/appStore';
 import {
   statusConfig,
-  serviceConfig,
   FULL_SERVICE_CONFIG,
   isFullService,
   prospectCategoryLabels,
@@ -25,16 +24,12 @@ import { toast } from 'sonner';
 import { MAPBOX_ACCESS_TOKEN } from '@/config/mapbox';
 import { attachLongPress } from '@/lib/longPress';
 
-// Pin color by service mix: full-service accounts get their own color, a
-// single-service account is colored by that service, and accounts with a
-// partial (but not full) mix of services fall back to a neutral gray — there's
-// no single canonical color for "some but not all services".
-const NEUTRAL_PIN_COLOR = '#6b7280';
+// Pin color is binary: full-service accounts are blue (FULL_SERVICE_CONFIG),
+// everything else is this green — individual per-service colors only show up
+// in the account drawer's service badges, not on the map itself.
+const NON_FULL_SERVICE_PIN_COLOR = '#388E3C';
 function getAccountPinColor(account: Pick<Account, 'services'>): string {
-  const { services } = account;
-  if (isFullService(services)) return FULL_SERVICE_CONFIG.color;
-  if (services.length === 1) return serviceConfig[services[0]].color;
-  return NEUTRAL_PIN_COLOR;
+  return isFullService(account.services) ? FULL_SERVICE_CONFIG.color : NON_FULL_SERVICE_PIN_COLOR;
 }
 
 export default function AccountMap() {

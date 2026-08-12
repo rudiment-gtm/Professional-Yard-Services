@@ -22,3 +22,8 @@ verify_jwt = false
 # service-to-service) — no end-user session to verify a JWT against.
 [functions.notify-n8n-quote-created]
 verify_jwt = false
+
+# Called by n8n after it generates a quote's Google Doc — no end-user
+# session; authenticated via the X-N8N-Secret header instead.
+[functions.n8n-update-quote-doc]
+verify_jwt = false

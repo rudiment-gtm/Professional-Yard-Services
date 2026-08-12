@@ -18,6 +18,7 @@ export interface AccountEvent {
   quote_price_usd: number | null;
   quote_line_items: Record<string, number> | null;
   quote_number: string | null;
+  quote_doc_url: string | null;
 }
 
 export function useAccountEvents(accountId: string | undefined) {
@@ -31,6 +32,27 @@ export function useAccountEvents(accountId: string | undefined) {
         .eq('account_id', accountId)
         .order('created_at', { ascending: false })
         .limit(5);
+      if (error) throw error;
+      return data as AccountEvent[];
+    },
+    enabled: !!accountId,
+  });
+}
+
+// Full quote history for an account (unlike useAccountEvents' capped, mixed
+// feed) — used by the drawer's dedicated "Quotes" section and to pre-fill a
+// new quote from the account's most recent one.
+export function useAccountQuotes(accountId: string | undefined) {
+  return useQuery<AccountEvent[]>({
+    queryKey: ['account_quotes', accountId],
+    queryFn: async () => {
+      if (!accountId) return [];
+      const { data, error } = await supabase
+        .from('account_events')
+        .select('*')
+        .eq('account_id', accountId)
+        .eq('event_type', 'Quote Created')
+        .order('created_at', { ascending: false });
       if (error) throw error;
       return data as AccountEvent[];
     },

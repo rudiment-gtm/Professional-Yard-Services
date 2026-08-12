@@ -60,7 +60,8 @@ import { useQueryClient } from '@tanstack/react-query';
 import { useAuthContext } from '@/components/AuthProvider';
 import { useAccountNotes, useAddNote, useUpdateNote, useDeleteNote } from '@/hooks/useAccountNotes';
 import type { AccountNote } from '@/hooks/useAccountNotes';
-import { useAccountEvents } from '@/hooks/useAccountEvents';
+import { useAccountEvents, useAccountQuotes } from '@/hooks/useAccountEvents';
+import type { AccountEvent } from '@/hooks/useAccountEvents';
 import { findAccountByAddress, useCreateAccountFromAroundMe, useUpdateAccountStatus } from '@/hooks/useAccounts';
 import { useProspectContactsForAccount, useUpsertProspectContact } from '@/hooks/useProspectContacts';
 import type { ProspectContact } from '@/hooks/useProspectContacts';
@@ -128,6 +129,7 @@ export default function AccountDrawer() {
   const updateNoteMutation = useUpdateNote();
   const deleteNoteMutation = useDeleteNote();
   const { data: accountEvents = [] } = useAccountEvents(realAccountId);
+  const { data: accountQuotes = [] } = useAccountQuotes(realAccountId);
   const createAccountFromAroundMe = useCreateAccountFromAroundMe();
   const updateAccountStatusMutation = useUpdateAccountStatus();
 
@@ -142,7 +144,29 @@ export default function AccountDrawer() {
       setEndTime(toHHMM(end));
     }
   }, [isDrawerOpen]);
-  
+
+  // Pre-fill a new quote from the account's most recent one — same
+  // services, prices, and notes — so reps aren't re-typing a repeat quote
+  // from scratch. Only fires once per form (guarded by quoteServices being
+  // empty) so it never clobbers something the rep already edited.
+  useEffect(() => {
+    if (eventType === 'Quote Created' && quoteServices.length === 0 && accountQuotes.length > 0) {
+      const mostRecent = accountQuotes[0];
+      const services = (mostRecent.quote_services ?? []) as ServiceType[];
+      if (services.length === 0) return;
+      setQuoteServices(services);
+      const priceStrings: Record<string, string> = {};
+      if (mostRecent.quote_line_items) {
+        for (const [s, price] of Object.entries(mostRecent.quote_line_items)) {
+          priceStrings[s] = String(price);
+        }
+      }
+      setQuotePrices(priceStrings);
+      if (!visitNotes && mostRecent.notes) setVisitNotes(mostRecent.notes);
+      toast.info(`Pre-filled from ${mostRecent.quote_number ?? 'the last quote'} — review before logging.`);
+    }
+  }, [eventType, accountQuotes]);
+
   if (!selectedAccount) return null;
 
   const combineDateTime = (d: Date, t: string): Date | null => {
@@ -794,6 +818,49 @@ export default function AccountDrawer() {
                   )}
                 </div>
               </div>
+
+              {/* Quotes — full account-level history, newest first */}
+              {!isPreview && accountQuotes.length > 0 && (
+                <div className="space-y-2">
+                  <h3 className="text-sm font-semibold text-muted-foreground uppercase tracking-wider">
+                    Quotes ({accountQuotes.length})
+                  </h3>
+                  <div className="space-y-1.5">
+                    {accountQuotes.map((q: AccountEvent) => (
+                      <div key={q.id} className="bg-muted/50 rounded-lg p-2.5 space-y-1">
+                        <div className="flex items-center justify-between gap-2">
+                          <p className="text-xs font-medium truncate">{q.quote_number ?? 'Quote'}</p>
+                          <p className="text-[11px] text-muted-foreground flex-shrink-0">
+                            {format(new Date(q.created_at), 'MMM d, yyyy · h:mm a')}
+                          </p>
+                        </div>
+                        <p className="text-[11px] text-muted-foreground truncate">
+                          {q.quote_line_items && Object.keys(q.quote_line_items).length > 0 ? (
+                            Object.entries(q.quote_line_items)
+                              .map(([s, price]) => `${serviceConfig[s as ServiceType]?.label ?? s} $${Number(price).toLocaleString()}`)
+                              .join(', ')
+                          ) : (
+                            (q.quote_services ?? []).map((s) => serviceConfig[s as ServiceType]?.label ?? s).join(', ')
+                          )}
+                          {q.quote_price_usd != null && ` · Total $${q.quote_price_usd.toLocaleString()}`}
+                        </p>
+                        {q.quote_doc_url ? (
+                          <a
+                            href={q.quote_doc_url}
+                            target="_blank"
+                            rel="noopener noreferrer"
+                            className="text-[11px] text-primary inline-flex items-center gap-1"
+                          >
+                            View quote doc <ExternalLink className="w-3 h-3" />
+                          </a>
+                        ) : (
+                          <p className="text-[11px] text-muted-foreground italic">Doc pending…</p>
+                        )}
+                      </div>
+                    ))}
+                  </div>
+                </div>
+              )}
 
               {/* Status Update */}
               <div className="space-y-2 pb-[15px]">

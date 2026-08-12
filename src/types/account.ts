@@ -138,7 +138,7 @@ export const serviceConfig: Record<ServiceType, { label: string; color: string }
   sprinklers: { label: 'Sprinklers', color: '#1E88E5' },
 };
 
-export const FULL_SERVICE_CONFIG = { label: 'Full Service', color: '#9C27B0' };
+export const FULL_SERVICE_CONFIG = { label: 'Full Service', color: '#1976D2' };
 
 // Prospect categories for "Around Me" — property/business types worth
 // prospecting for yard service (replaces Smart Route's B2B "Industry" concept).
