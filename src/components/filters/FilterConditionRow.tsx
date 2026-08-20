@@ -20,6 +20,7 @@ interface Props {
 const FIELD_OPTIONS: FilterField[] = [
   'status',
   'services',
+  'tags',
   'city',
   'state',
   'lastVisitDate',

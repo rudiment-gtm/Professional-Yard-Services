@@ -8,6 +8,7 @@ import {
   SelectTrigger,
   SelectValue,
 } from '@/components/ui/select';
+import { Table, TableHeader, TableBody, TableRow, TableHead, TableCell } from '@/components/ui/table';
 import { useAppStore } from '@/store/appStore';
 import { useAllProspectContacts } from '@/hooks/useProspectContacts';
 import { statusConfig, AccountStatus, Account } from '@/types/account';
@@ -164,12 +165,9 @@ export default function ContactsView() {
   };
 
   const SortableTh = ({ column, children }: { column: SortColumn; children: React.ReactNode }) => (
-    <th
-      className="text-left px-4 py-2.5 font-medium cursor-pointer select-none whitespace-nowrap"
-      onClick={() => handleSort(column)}
-    >
+    <TableHead className="cursor-pointer select-none whitespace-nowrap" onClick={() => handleSort(column)}>
       <span className="inline-flex items-center">{children}<SortIcon column={column} /></span>
-    </th>
+    </TableHead>
   );
 
   const handleExport = () => {
@@ -266,57 +264,55 @@ export default function ContactsView() {
         ) : filtered.length === 0 ? (
           <p className="text-sm text-muted-foreground py-6">No contacts match these filters.</p>
         ) : (
-          <div className="glass-card overflow-x-auto">
-            <table className="w-full text-sm">
-              <thead>
-                <tr className="border-b border-border bg-muted/50 text-xs font-mono uppercase tracking-wider text-muted-foreground">
-                  <SortableTh column="name">Name</SortableTh>
-                  <SortableTh column="title">Title</SortableTh>
-                  <SortableTh column="account">Account</SortableTh>
-                  <SortableTh column="status">Status</SortableTh>
-                  <SortableTh column="email">Email</SortableTh>
-                  <SortableTh column="phone">Mobile</SortableTh>
-                  <th className="text-left px-4 py-2.5 font-medium">Source</th>
-                  <th className="px-4 py-2.5" />
-                </tr>
-              </thead>
-              <tbody>
-                {filtered.map((c) => (
-                  <tr key={c.id} className="border-t border-border">
-                    <td className="px-4 py-2.5 whitespace-nowrap">
-                      {c.linkedin_url ? (
-                        <a href={externalUrl(c.linkedin_url)} target="_blank" rel="noopener noreferrer" className="hover:underline">
-                          {c.name}
-                        </a>
-                      ) : c.name}
-                    </td>
-                    <td className="px-4 py-2.5 text-muted-foreground whitespace-nowrap">{c.title || '—'}</td>
-                    <td className="px-4 py-2.5 text-muted-foreground whitespace-nowrap">{c.account_name}</td>
-                    <td className="px-4 py-2.5 whitespace-nowrap">
-                      {c.accountStatus ? (
-                        <span className={`status-badge ${statusConfig[c.accountStatus].bgClass}`}>
-                          {statusConfig[c.accountStatus].label}
-                        </span>
-                      ) : '—'}
-                    </td>
-                    <td className={`px-4 py-2.5 whitespace-nowrap ${c.email ? '' : 'text-muted-foreground italic'}`}>{c.email || 'none on file'}</td>
-                    <td className={`px-4 py-2.5 whitespace-nowrap ${c.phone ? '' : 'text-muted-foreground italic'}`}>{c.phone || 'none on file'}</td>
-                    <td className="px-4 py-2.5 whitespace-nowrap text-xs text-muted-foreground">
-                      {c.source === 'account' ? 'QuickBooks' : 'Prospeo'}
-                    </td>
-                    <td className="px-4 py-2.5 text-right whitespace-nowrap">
-                      <button
-                        onClick={() => viewOnMap(c.account_id)}
-                        className="text-xs border border-border rounded-md px-2 py-1 hover:bg-muted transition-colors"
-                      >
-                        View on map
-                      </button>
-                    </td>
-                  </tr>
-                ))}
-              </tbody>
-            </table>
-          </div>
+          <Table>
+            <TableHeader className="sticky top-0 bg-background z-10 shadow-[0_1px_0_0_hsl(var(--border))]">
+              <TableRow>
+                <SortableTh column="name">Name</SortableTh>
+                <SortableTh column="title">Title</SortableTh>
+                <SortableTh column="account">Account</SortableTh>
+                <SortableTh column="status">Status</SortableTh>
+                <SortableTh column="email">Email</SortableTh>
+                <SortableTh column="phone">Mobile</SortableTh>
+                <TableHead>Source</TableHead>
+                <TableHead />
+              </TableRow>
+            </TableHeader>
+            <TableBody>
+              {filtered.map((c) => (
+                <TableRow key={c.id}>
+                  <TableCell className="whitespace-nowrap">
+                    {c.linkedin_url ? (
+                      <a href={externalUrl(c.linkedin_url)} target="_blank" rel="noopener noreferrer" className="hover:underline">
+                        {c.name}
+                      </a>
+                    ) : c.name}
+                  </TableCell>
+                  <TableCell className="text-muted-foreground whitespace-nowrap">{c.title || '—'}</TableCell>
+                  <TableCell className="text-muted-foreground whitespace-nowrap">{c.account_name}</TableCell>
+                  <TableCell className="whitespace-nowrap">
+                    {c.accountStatus ? (
+                      <span className={`status-badge ${statusConfig[c.accountStatus].bgClass}`}>
+                        {statusConfig[c.accountStatus].label}
+                      </span>
+                    ) : '—'}
+                  </TableCell>
+                  <TableCell className={`whitespace-nowrap ${c.email ? '' : 'text-muted-foreground italic'}`}>{c.email || 'none on file'}</TableCell>
+                  <TableCell className={`whitespace-nowrap ${c.phone ? '' : 'text-muted-foreground italic'}`}>{c.phone || 'none on file'}</TableCell>
+                  <TableCell className="whitespace-nowrap text-xs text-muted-foreground">
+                    {c.source === 'account' ? 'QuickBooks' : 'Prospeo'}
+                  </TableCell>
+                  <TableCell className="text-right whitespace-nowrap">
+                    <button
+                      onClick={() => viewOnMap(c.account_id)}
+                      className="text-xs border border-border rounded-md px-2 py-1 hover:bg-muted transition-colors"
+                    >
+                      View on map
+                    </button>
+                  </TableCell>
+                </TableRow>
+              ))}
+            </TableBody>
+          </Table>
         )}
       </div>
     </div>

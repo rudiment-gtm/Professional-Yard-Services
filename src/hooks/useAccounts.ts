@@ -66,6 +66,7 @@ const transformDbAccount = (row: AccountRow): Account => ({
 
   accountStatus: (row.account_status as AccountStatus) || 'lead',
   cancelDate: row.cancel_date ?? null,
+  tags: [], // filled in by useAccounts() after a bulk account_tags join
 
   billingAddress: row.billing_address || undefined,
   billingCity: row.billing_city || undefined,
@@ -145,6 +146,24 @@ export function useAccounts() {
         offset += pageSize;
       }
 
+      // Bulk-join tags onto each account (a small table — every attach/detach
+      // is one row, not one per account) so the map toolbar can filter by tag
+      // client-side the same way it already does for status/services.
+      const { data: accountTagRows, error: tagsError } = await supabase
+        .from('account_tags')
+        .select('account_id, tag_id');
+      if (tagsError) throw tagsError;
+
+      const tagsByAccount = new Map<string, string[]>();
+      for (const row of accountTagRows ?? []) {
+        const list = tagsByAccount.get(row.account_id) ?? [];
+        list.push(row.tag_id);
+        tagsByAccount.set(row.account_id, list);
+      }
+      for (const account of allAccounts) {
+        account.tags = tagsByAccount.get(account.id) ?? [];
+      }
+
       console.log(`[useAccounts] Fetched ${allAccounts.length} total accounts`);
       return allAccounts;
     },
@@ -161,6 +180,47 @@ export function useUpdateAccountStatus() {
     mutationFn: async ({ accountId, status }: { accountId: string; status: AccountStatus }) => {
       const { error } = await (supabase.from('accounts') as any)
         .update({ account_status: status })
+        .eq('id', accountId);
+
+      if (error) throw error;
+    },
+    onSuccess: () => {
+      queryClient.invalidateQueries({ queryKey: ['accounts'] });
+    },
+  });
+}
+
+export interface ContactPatch {
+  salutation?: string;
+  firstName?: string;
+  middleInitial?: string;
+  lastName?: string;
+  jobTitle?: string;
+  mainPhone?: string;
+  altPhone?: string;
+  mainEmail?: string;
+  website?: string;
+  linkedinUrl?: string;
+}
+
+export function useUpdateAccountContact() {
+  const queryClient = useQueryClient();
+
+  return useMutation({
+    mutationFn: async ({ accountId, patch }: { accountId: string; patch: ContactPatch }) => {
+      const { error } = await (supabase.from('accounts') as any)
+        .update({
+          salutation: patch.salutation || null,
+          first_name: patch.firstName || null,
+          middle_initial: patch.middleInitial || null,
+          last_name: patch.lastName || null,
+          job_title: patch.jobTitle || null,
+          main_phone: patch.mainPhone || null,
+          alt_phone: patch.altPhone || null,
+          main_email: patch.mainEmail || null,
+          website: patch.website || null,
+          linkedin_url: patch.linkedinUrl || null,
+        })
         .eq('id', accountId);
 
       if (error) throw error;

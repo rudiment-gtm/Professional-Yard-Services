@@ -7,6 +7,7 @@ function fieldValue(account: Account, field: FilterCondition['field']): unknown 
   switch (field) {
     case 'status': return account.accountStatus;
     case 'services': return account.services;
+    case 'tags': return account.tags;
     case 'city': return account.routeCity;
     case 'state': return account.routeState;
     case 'lastVisitDate': return account.lastVisitDate;
@@ -42,6 +43,13 @@ function evaluateCondition(account: Account, cond: FilterCondition): boolean {
       const match = arr.some((s) =>
         s === 'fullService' ? isFullService(accountServices) : accountServices.includes(s as ServiceType)
       );
+      return operator === 'not_in' ? !match : match;
+    }
+    case 'tags': {
+      const arr = value.values;
+      if (arr.length === 0) return true;
+      const accountTags = Array.isArray(v) ? (v as string[]) : [];
+      const match = arr.some((id) => accountTags.includes(id));
       return operator === 'not_in' ? !match : match;
     }
     case 'strings': {

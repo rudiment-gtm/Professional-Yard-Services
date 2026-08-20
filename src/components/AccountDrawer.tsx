@@ -10,7 +10,6 @@ import {
   Clock,
   User,
   ClipboardCheck,
-  ChevronRight,
   ExternalLink,
   Trash2,
   Pencil,
@@ -59,7 +58,6 @@ import { toast } from 'sonner';
 import { useQueryClient } from '@tanstack/react-query';
 import { useAuthContext } from '@/components/AuthProvider';
 import { useAccountNotes, useAddNote, useUpdateNote, useDeleteNote } from '@/hooks/useAccountNotes';
-import type { AccountNote } from '@/hooks/useAccountNotes';
 import { useAccountEvents, useAccountQuotes } from '@/hooks/useAccountEvents';
 import type { AccountEvent } from '@/hooks/useAccountEvents';
 import { findAccountByAddress, useCreateAccountFromAroundMe, useUpdateAccountStatus } from '@/hooks/useAccounts';
@@ -67,6 +65,28 @@ import { useProspectContactsForAccount, useUpsertProspectContact } from '@/hooks
 import type { ProspectContact } from '@/hooks/useProspectContacts';
 import { format } from 'date-fns';
 import { REP_ASSIGNEES } from '@/lib/repAssignees';
+import { useCustomActivityTypes, useCreateActivityType } from '@/hooks/useTags';
+import EditContactDialog from '@/components/EditContactDialog';
+import AccountTagsEditor from '@/components/AccountTagsEditor';
+
+// Built-in activity types, shared with custom ones reps add on top (see
+// activity_types table via useTags.ts's useCustomActivityTypes).
+const BUILT_IN_ACTIVITY_TYPES = [
+  'Quote Created',
+  'Call',
+  'Drop By',
+  'Follow up',
+  'Presentation',
+  'Setup',
+  'First Post',
+  'Training',
+  'Onboarding',
+  'Direct Hire',
+  'Retention',
+  'Expansion',
+  'Reactivation',
+  'Freshdesk Ticket',
+];
 
 // QB accounts often only have company + free-text contact fields (no named
 // person) — ~49% of source rows have no first/last name at all. Build a
@@ -84,39 +104,26 @@ export default function AccountDrawer() {
   const [editingNoteId, setEditingNoteId] = useState<string | null>(null);
   const [editingNoteText, setEditingNoteText] = useState('');
   const [eventType, setEventType] = useState<string>('');
-  const [eventMedium, setEventMedium] = useState<string>('');
   const [assignedTo, setAssignedTo] = useState<string>(REP_ASSIGNEES[0]);
   const [quoteServices, setQuoteServices] = useState<ServiceType[]>([]);
   const [quotePrices, setQuotePrices] = useState<Record<string, string>>({});
   const [findingContacts, setFindingContacts] = useState(false);
   const [revealingField, setRevealingField] = useState<Record<string, 'email' | 'phone'>>({});
+  const [isCreatingActivityType, setIsCreatingActivityType] = useState(false);
+  const [customActivityLabel, setCustomActivityLabel] = useState('');
 
-  const eventMediumOptions = ['In-Person', 'Phone Call', 'Video Call', 'Email', 'Text', 'Other'];
+  const { data: customActivityTypes = [] } = useCustomActivityTypes();
+  const createActivityType = useCreateActivityType();
 
   const toHHMM = (d: Date) => `${String(d.getHours()).padStart(2, '0')}:${String(d.getMinutes()).padStart(2, '0')}`;
 
+  // Single Date+Time in the UI — end_at (required by the DB) is derived
+  // silently as start + 30min, matching the reference design's single
+  // date/time field instead of a separate Start/End range.
   const [startDate, setStartDate] = useState<Date>(new Date());
   const [startTime, setStartTime] = useState<string>(toHHMM(new Date()));
-  const [endDate, setEndDate] = useState<Date>(new Date(Date.now() + 30 * 60 * 1000));
-  const [endTime, setEndTime] = useState<string>(toHHMM(new Date(Date.now() + 30 * 60 * 1000)));
 
-  const eventTypeOptions = [
-    'Quote Created',
-    'Call',
-    'Drop By',
-    'Follow up',
-    'Presentation',
-    'Setup',
-    'First Post',
-    'Training',
-    'Onboarding',
-    'Direct Hire',
-    'Retention',
-    'Expansion',
-    'Reactivation',
-    'Freshdesk Ticket',
-  ];
-
+  const eventTypeOptions = [...BUILT_IN_ACTIVITY_TYPES, ...customActivityTypes];
   const assignedToOptions = REP_ASSIGNEES;
   const queryClient = useQueryClient();
   const { user, profile } = useAuthContext();
@@ -133,15 +140,12 @@ export default function AccountDrawer() {
   const createAccountFromAroundMe = useCreateAccountFromAroundMe();
   const updateAccountStatusMutation = useUpdateAccountStatus();
 
-  // Reset event log times to current local time whenever drawer opens
+  // Reset event log time to current local time whenever drawer opens
   useEffect(() => {
     if (isDrawerOpen) {
       const now = new Date();
-      const end = new Date(now.getTime() + 30 * 60 * 1000);
       setStartDate(now);
       setStartTime(toHHMM(now));
-      setEndDate(end);
-      setEndTime(toHHMM(end));
     }
   }, [isDrawerOpen]);
 
@@ -177,7 +181,7 @@ export default function AccountDrawer() {
     return out;
   };
   const startAt = combineDateTime(startDate, startTime);
-  const endAt = combineDateTime(endDate, endTime);
+  const endAt = startAt ? new Date(startAt.getTime() + 30 * 60 * 1000) : null;
   const isQuoteCreated = eventType === 'Quote Created';
   const servicesMissingPrice = isQuoteCreated
     ? quoteServices.filter((s) => {
@@ -190,22 +194,15 @@ export default function AccountDrawer() {
     return sum + (Number.isFinite(n) ? n : 0);
   }, 0);
   const missingFields: string[] = [];
-  if (!eventType) missingFields.push('Event Type');
-  if (!eventMedium) missingFields.push('Event Medium');
-  if (!assignedTo) missingFields.push('Assigned To');
-  if (!startDate || !startTime) missingFields.push('Start');
-  if (!endDate || !endTime) missingFields.push('End');
+  if (!eventType) missingFields.push('Activity Type');
+  if (!assignedTo) missingFields.push('Account Owner');
+  if (!startDate || !startTime) missingFields.push('Date/Time');
   if (isQuoteCreated && quoteServices.length === 0) missingFields.push('Service(s) Quoted');
   if (isQuoteCreated && servicesMissingPrice.length > 0) {
     missingFields.push(`Price (${servicesMissingPrice.map((s) => serviceConfig[s].label).join(', ')})`);
   }
-  const endBeforeStart = !!(startAt && endAt && endAt < startAt);
-  const canLog = missingFields.length === 0 && !endBeforeStart;
-  const disabledReason = !canLog
-    ? endBeforeStart
-      ? 'End must be after start.'
-      : `Please fill: ${missingFields.join(', ')}.`
-    : '';
+  const canLog = missingFields.length === 0;
+  const disabledReason = !canLog ? `Please fill: ${missingFields.join(', ')}.` : '';
 
   const config = statusConfig[selectedAccount.accountStatus];
   const contactDisplayName = getContactDisplayName(selectedAccount);
@@ -216,7 +213,7 @@ export default function AccountDrawer() {
       account.routeAddress === selectedAccount.routeAddress &&
       account.id !== selectedAccount.id
   );
-  
+
   const handleLogVisit = async () => {
     if (!canLog || !startAt || !endAt) {
       toast.error(disabledReason || 'Please complete required fields');
@@ -274,7 +271,6 @@ export default function AccountDrawer() {
     logVisit(effectiveAccount.id, visitNotes);
     const noteText = visitNotes;
     const evType = eventType;
-    const evMedium = eventMedium;
     const assignee = assignedTo;
     const evIsQuoteCreated = isQuoteCreated;
     const evQuoteServices = quoteServices;
@@ -287,7 +283,6 @@ export default function AccountDrawer() {
     setVisitNotes('');
 
     setEventType('');
-    setEventMedium('');
     setAssignedTo(REP_ASSIGNEES[0]);
     setQuoteServices([]);
     setQuotePrices({});
@@ -298,7 +293,6 @@ export default function AccountDrawer() {
         .insert({
           account_id: effectiveAccount.id,
           event_type: evType || 'visit',
-          event_medium: evMedium,
           assigned_to: assignee,
           start_at: startIso,
           end_at: endIso,
@@ -435,7 +429,7 @@ export default function AccountDrawer() {
       year: 'numeric',
     });
   };
-  
+
   return (
     <AnimatePresence>
       {isDrawerOpen && (
@@ -448,7 +442,7 @@ export default function AccountDrawer() {
             className="fixed inset-0 bg-foreground/20 backdrop-blur-sm z-40 md:hidden"
             onClick={() => setDrawerOpen(false)}
           />
-          
+
           {/* Drawer */}
           <motion.div
             initial={{ x: '100%' }}
@@ -535,9 +529,13 @@ export default function AccountDrawer() {
 
               {/* Primary Contact Card */}
               <div className="space-y-2">
-                <h3 className="text-sm font-semibold text-muted-foreground uppercase tracking-wider">
-                   Main Contact
-                </h3>
+                <div className="flex items-center justify-between">
+                  <h3 className="text-sm font-semibold text-muted-foreground uppercase tracking-wider">
+                    Primary Contact
+                  </h3>
+                  {!isPreview && <EditContactDialog account={selectedAccount} />}
+                </div>
+
                 <div className="glass-card p-4 space-y-3">
                   <div className="flex items-center gap-3">
                     <div className="icon-chip-lg">
@@ -551,34 +549,32 @@ export default function AccountDrawer() {
                     </div>
                   </div>
 
-                  <div className="grid gap-2 pt-2">
+                  <div className="grid grid-cols-2 gap-2 pt-2">
                     {selectedAccount.mainPhone ? (
                       <a
                         href={`tel:${selectedAccount.mainPhone}`}
-                        className="flex items-center gap-3 p-2 rounded-lg hover:bg-muted transition-colors group"
+                        className="flex items-center gap-2 p-2 rounded-lg hover:bg-muted transition-colors group min-w-0"
                       >
-                        <span className="icon-chip"><Phone className="w-4 h-4 text-primary" /></span>
-                        <span className="text-sm">{selectedAccount.mainPhone}</span>
-                        <ChevronRight className="w-4 h-4 ml-auto text-muted-foreground" />
+                        <span className="icon-chip shrink-0"><Phone className="w-4 h-4 text-primary" /></span>
+                        <span className="text-sm truncate">{selectedAccount.mainPhone}</span>
                       </a>
                     ) : (
-                      <div className="flex items-center gap-3 p-2 rounded-lg">
-                        <span className="icon-chip"><Phone className="w-4 h-4 text-muted-foreground" /></span>
+                      <div className="flex items-center gap-2 p-2 rounded-lg">
+                        <span className="icon-chip shrink-0"><Phone className="w-4 h-4 text-muted-foreground" /></span>
                         <span className="text-sm text-muted-foreground">—</span>
                       </div>
                     )}
                     {selectedAccount.mainEmail ? (
                       <a
                         href={`mailto:${selectedAccount.mainEmail}`}
-                        className="flex items-center gap-3 p-2 rounded-lg hover:bg-muted transition-colors group"
+                        className="flex items-center gap-2 p-2 rounded-lg hover:bg-muted transition-colors group min-w-0"
                       >
-                        <span className="icon-chip"><Mail className="w-4 h-4 text-primary" /></span>
-                        <span className="text-sm truncate">{selectedAccount.mainEmail}</span>
-                        <ChevronRight className="w-4 h-4 ml-auto text-muted-foreground flex-shrink-0" />
+                        <span className="icon-chip shrink-0"><Mail className="w-4 h-4 text-primary" /></span>
+                        <span className="text-sm truncate">{selectedAccount.mainEmail || 'Email'}</span>
                       </a>
                     ) : (
-                      <div className="flex items-center gap-3 p-2 rounded-lg">
-                        <span className="icon-chip"><Mail className="w-4 h-4 text-muted-foreground" /></span>
+                      <div className="flex items-center gap-2 p-2 rounded-lg">
+                        <span className="icon-chip shrink-0"><Mail className="w-4 h-4 text-muted-foreground" /></span>
                         <span className="text-sm text-muted-foreground">—</span>
                       </div>
                     )}
@@ -587,164 +583,87 @@ export default function AccountDrawer() {
                         href={/^https?:\/\//i.test(selectedAccount.website) ? selectedAccount.website : `https://${selectedAccount.website}`}
                         target="_blank"
                         rel="noopener noreferrer"
-                        className="flex items-center gap-3 p-2 rounded-lg hover:bg-muted transition-colors group"
+                        className="flex items-center gap-2 p-2 rounded-lg hover:bg-muted transition-colors group min-w-0"
                       >
-                        <span className="icon-chip"><Globe className="w-4 h-4 text-primary" /></span>
+                        <span className="icon-chip shrink-0"><Globe className="w-4 h-4 text-primary" /></span>
                         <span className="text-sm truncate">{selectedAccount.website.replace(/^https?:\/\//i, '')}</span>
-                        <ExternalLink className="w-4 h-4 ml-auto text-muted-foreground flex-shrink-0" />
                       </a>
                     ) : (
-                      <div className="flex items-center gap-3 p-2 rounded-lg">
-                        <span className="icon-chip"><Globe className="w-4 h-4 text-muted-foreground" /></span>
+                      <div className="flex items-center gap-2 p-2 rounded-lg">
+                        <span className="icon-chip shrink-0"><Globe className="w-4 h-4 text-muted-foreground" /></span>
                         <span className="text-sm text-muted-foreground">—</span>
                       </div>
                     )}
-                    {selectedAccount.linkedinUrl && (
+                    {selectedAccount.linkedinUrl ? (
                       <a
                         href={selectedAccount.linkedinUrl}
                         target="_blank"
                         rel="noopener noreferrer"
-                        className="flex items-center gap-3 p-2 rounded-lg hover:bg-muted transition-colors group"
+                        className="flex items-center gap-2 p-2 rounded-lg hover:bg-muted transition-colors group min-w-0"
                       >
-                        <span className="icon-chip"><Linkedin className="w-4 h-4 text-primary" /></span>
-                        <span className="text-sm">LinkedIn Profile</span>
-                        <ExternalLink className="w-4 h-4 ml-auto text-muted-foreground" />
+                        <span className="icon-chip shrink-0"><Linkedin className="w-4 h-4 text-primary" /></span>
+                        <span className="text-sm truncate">LinkedIn</span>
                       </a>
+                    ) : (
+                      <div className="flex items-center gap-2 p-2 rounded-lg">
+                        <span className="icon-chip shrink-0"><Linkedin className="w-4 h-4 text-muted-foreground" /></span>
+                        <span className="text-sm text-muted-foreground">—</span>
+                      </div>
                     )}
                   </div>
                 </div>
               </div>
 
-              {/* Contacts (found via Prospeo, persisted per account) */}
-              {!isPreview && (
-                <div className="space-y-2">
-                  <h3 className="text-sm font-semibold text-muted-foreground uppercase tracking-wider">
-                    Contacts{savedContacts.length > 0 ? ` (${savedContacts.length})` : ''}
-                  </h3>
-                  {savedContacts.map((contact) => {
-                    const revealing = revealingField[contact.id];
-                    return (
-                      <div key={contact.id} className="glass-card p-3 space-y-1.5">
-                        <div className="flex items-center justify-between">
-                          <div>
-                            <p className="text-sm font-medium">{contact.first_name} {contact.last_name}</p>
-                            {contact.title && <p className="text-xs text-muted-foreground">{contact.title}</p>}
-                          </div>
-                          {contact.linkedin_url && (
-                            <a
-                              href={/^https?:\/\//i.test(contact.linkedin_url) ? contact.linkedin_url : `https://${contact.linkedin_url}`}
-                              target="_blank"
-                              rel="noopener noreferrer"
-                              className="text-xs text-primary flex-shrink-0"
-                            >
-                              LinkedIn
-                            </a>
-                          )}
-                        </div>
-                        <div className="flex items-center justify-between text-xs pt-1">
-                          <span className="text-muted-foreground">Email</span>
-                          {contact.email ? (
-                            <span className="truncate max-w-[180px]">{contact.email}</span>
-                          ) : (
-                            <button
-                              onClick={() => handleRevealEmail(contact)}
-                              disabled={!!revealing}
-                              className="text-primary hover:underline disabled:opacity-60"
-                            >
-                              {revealing === 'email' ? 'Revealing…' : 'Reveal email'}
-                            </button>
-                          )}
-                        </div>
-                        <div className="flex items-center justify-between text-xs">
-                          <span className="text-muted-foreground">Mobile</span>
-                          {contact.phone ? (
-                            <span>{contact.phone}</span>
-                          ) : contact.email ? (
-                            <button
-                              onClick={() => handleRevealPhone(contact)}
-                              disabled={!!revealing}
-                              className="text-primary hover:underline disabled:opacity-60"
-                            >
-                              {revealing === 'phone' ? 'Revealing…' : 'Reveal mobile'}
-                            </button>
-                          ) : (
-                            <span className="text-muted-foreground">Reveal email first</span>
-                          )}
-                        </div>
-                      </div>
-                    );
-                  })}
-                  <button
-                    onClick={handleFindContacts}
-                    disabled={findingContacts}
-                    className="w-full inline-flex items-center justify-center gap-1.5 text-sm bg-primary/10 text-primary rounded-lg py-2 hover:bg-primary/20 transition-colors disabled:opacity-60"
-                  >
-                    {findingContacts ? <Loader2 className="w-3.5 h-3.5 animate-spin" /> : <UserSearch className="w-3.5 h-3.5" />}
-                    {findingContacts ? 'Searching…' : savedContacts.length > 0 ? 'Find another contact' : 'Find contacts'}
-                  </button>
-                </div>
-              )}
+              {/* Tags */}
+              {!isPreview && <AccountTagsEditor accountId={selectedAccount.id} />}
 
-              {/* Secondary Contacts */}
-              {secondaryContacts.length > 0 && (
-                <div className="space-y-2">
-                  <h3 className="text-sm font-semibold text-muted-foreground uppercase tracking-wider">
-                    Secondary Contacts ({secondaryContacts.length})
-                  </h3>
-                  <div className="space-y-2">
-                    {secondaryContacts.map((contact) => (
-                      <div key={contact.id} className="glass-card p-3 space-y-2">
-                        <div className="flex items-center gap-3">
-                          <div className="w-8 h-8 bg-primary/10 rounded-full flex items-center justify-center">
-                            <User className="w-4 h-4 text-primary" />
-                          </div>
-                          <div className="min-w-0">
-                            <p className="font-semibold text-sm text-foreground truncate">
-                              {getContactDisplayName(contact) || <span className="italic text-muted-foreground font-normal">No named contact</span>}
-                            </p>
-                            <p className="text-xs text-muted-foreground">{contact.jobTitle || '—'}</p>
-                          </div>
-                        </div>
-                        <div className="grid gap-1 pl-11">
-                          {contact.mainPhone ? (
-                            <a
-                              href={`tel:${contact.mainPhone}`}
-                              className="flex items-center gap-2 p-1.5 rounded-lg hover:bg-muted transition-colors group"
-                            >
-                              <Phone className="w-3.5 h-3.5 text-muted-foreground group-hover:text-primary" />
-                              <span className="text-xs">{contact.mainPhone}</span>
-                            </a>
-                          ) : (
-                            <div className="flex items-center gap-2 p-1.5">
-                              <Phone className="w-3.5 h-3.5 text-muted-foreground" />
-                              <span className="text-xs text-muted-foreground">—</span>
-                            </div>
-                          )}
-                          {contact.mainEmail ? (
-                            <a
-                              href={`mailto:${contact.mainEmail}`}
-                              className="flex items-center gap-2 p-1.5 rounded-lg hover:bg-muted transition-colors group"
-                            >
-                              <Mail className="w-3.5 h-3.5 text-muted-foreground group-hover:text-primary" />
-                              <span className="text-xs truncate">{contact.mainEmail}</span>
-                            </a>
-                          ) : (
-                            <div className="flex items-center gap-2 p-1.5">
-                              <Mail className="w-3.5 h-3.5 text-muted-foreground" />
-                              <span className="text-xs text-muted-foreground">—</span>
-                            </div>
-                          )}
-                        </div>
-                      </div>
-                    ))}
-                  </div>
-                </div>
-              )}
-              
-              {/* Address */}
+              {/* Account Status */}
               <div className="space-y-2">
                 <h3 className="text-sm font-semibold text-muted-foreground uppercase tracking-wider">
-                  Route Address
+                  Account Status
+                </h3>
+                <div className="flex flex-wrap gap-2">
+                  {(Object.entries(statusConfig) as [AccountStatus, typeof statusConfig[AccountStatus]][]).map(
+                    ([key, value]) => {
+                      const active = selectedAccount.accountStatus === key;
+                      return (
+                        <button
+                          key={key}
+                          type="button"
+                          disabled={isPreview}
+                          onClick={() => {
+                            if (active) return;
+                            const previousStatus = selectedAccount.accountStatus;
+                            updateAccountStatus(selectedAccount.id, key); // optimistic UI update
+                            updateAccountStatusMutation.mutate(
+                              { accountId: selectedAccount.id, status: key },
+                              {
+                                onError: (err) => {
+                                  updateAccountStatus(selectedAccount.id, previousStatus); // revert on failure
+                                  toast.error(`Failed to update status: ${err instanceof Error ? err.message : 'unknown error'}`);
+                                },
+                              },
+                            );
+                          }}
+                          className={cn(
+                            'px-3 py-1.5 rounded-full text-sm font-medium border transition-colors disabled:opacity-60',
+                            active
+                              ? 'bg-primary text-primary-foreground border-primary'
+                              : 'bg-transparent border-border text-muted-foreground hover:text-foreground hover:border-foreground/40',
+                          )}
+                        >
+                          {value.label}
+                        </button>
+                      );
+                    },
+                  )}
+                </div>
+              </div>
+
+              {/* Location */}
+              <div className="space-y-2">
+                <h3 className="text-sm font-semibold text-muted-foreground uppercase tracking-wider">
+                  Location
                 </h3>
                 {(() => {
                   const formattedAddress = [
@@ -752,47 +671,59 @@ export default function AccountDrawer() {
                     selectedAccount.routeCity,
                     `${selectedAccount.routeState ?? ''} ${selectedAccount.routeZip ?? ''}`.trim()
                   ].filter(Boolean).join(', ');
-
-                  return (
-                    <a
-                      href={`https://maps.google.com/?q=${encodeURIComponent(formattedAddress)}`}
-                      target="_blank"
-                      rel="noopener noreferrer"
-                      className="flex items-start gap-3 p-3 glass-card hover:bg-muted transition-colors group"
-                    >
-                      <MapPin className="w-5 h-5 text-muted-foreground group-hover:text-primary flex-shrink-0 mt-0.5" />
-                      <div className="flex-1">
-                        <p className="text-sm">{formattedAddress || '—'}</p>
-                      </div>
-                      <ExternalLink className="w-4 h-4 text-muted-foreground flex-shrink-0" />
-                    </a>
-                  );
-                })()}
-                {(() => {
                   const formattedBilling = [
                     selectedAccount.billingAddress,
                     selectedAccount.billingCity,
                     `${selectedAccount.billingState ?? ''} ${selectedAccount.billingZip ?? ''}`.trim()
                   ].filter(Boolean).join(', ');
-                  if (!formattedBilling || formattedBilling === selectedAccount.routeAddress) return null;
+                  const billingSameAsRoute = !formattedBilling || formattedBilling === selectedAccount.routeAddress;
 
                   return (
-                    <div className="flex items-start gap-3 p-3 rounded-xl">
-                      <MapPin className="w-4 h-4 text-muted-foreground/60 flex-shrink-0 mt-0.5" />
-                      <div className="flex-1">
-                        <p className="text-xs text-muted-foreground">Billing: {formattedBilling}</p>
+                    <div className="glass-card p-3 flex items-start gap-3">
+                      <MapPin className="w-4 h-4 text-muted-foreground flex-shrink-0 mt-0.5" />
+                      <div className="flex-1 min-w-0">
+                        <p className="text-sm">{formattedAddress || '—'}</p>
+                        <p className="text-xs text-muted-foreground">
+                          {billingSameAsRoute ? 'Billing address is the same' : `Billing: ${formattedBilling}`}
+                        </p>
                       </div>
                     </div>
                   );
                 })()}
+                <div className="grid grid-cols-2 gap-2">
+                  <Button
+                    variant="outline"
+                    size="sm"
+                    className="gap-2"
+                    onClick={() => window.open(`https://maps.google.com/?q=${encodeURIComponent(selectedAccount.routeAddress ?? '')}`, '_blank')}
+                  >
+                    <MapPin className="w-3.5 h-3.5" />
+                    Directions
+                  </Button>
+                  <Button
+                    variant="outline"
+                    size="sm"
+                    className="gap-2 border-status-active/40 text-status-active hover:bg-status-active/10 hover:text-status-active"
+                    onClick={() => openAroundMeWithOrigin({ kind: 'account', accountId: selectedAccount.id })}
+                    disabled={isPreview}
+                  >
+                    <Binoculars className="w-3.5 h-3.5" />
+                    Search nearby
+                  </Button>
+                </div>
               </div>
 
               {/* Activity & Stats */}
               <div className="space-y-2">
-                <h3 className="text-sm font-semibold text-muted-foreground uppercase tracking-wider">
-                  Activity
-                </h3>
-                <div className="grid grid-cols-2 gap-3">
+                <div className="flex items-center justify-between">
+                  <h3 className="text-sm font-semibold text-muted-foreground uppercase tracking-wider">
+                    Activity
+                  </h3>
+                  <span className="text-xs text-muted-foreground">
+                    {selectedAccount.visitCount} visit{selectedAccount.visitCount === 1 ? '' : 's'} logged
+                  </span>
+                </div>
+                <div className={cn('grid gap-3', selectedAccount.nextFollowUpDate ? 'grid-cols-3' : 'grid-cols-2')}>
                   <div className="glass-card p-3">
                     <div className="flex items-center gap-2 text-muted-foreground mb-1">
                       <Calendar className="w-4 h-4" />
@@ -803,15 +734,15 @@ export default function AccountDrawer() {
                   <div className="glass-card p-3">
                     <div className="flex items-center gap-2 text-muted-foreground mb-1">
                       <ClipboardCheck className="w-4 h-4" />
-                      <span className="text-xs">Total Visits</span>
+                      <span className="text-xs">Visits</span>
                     </div>
                     <p className="font-semibold">{selectedAccount.visitCount}</p>
                   </div>
                   {selectedAccount.nextFollowUpDate && (
-                    <div className="glass-card p-3 col-span-2">
+                    <div className="glass-card p-3">
                       <div className="flex items-center gap-2 text-muted-foreground mb-1">
                         <Calendar className="w-4 h-4" />
-                        <span className="text-xs">Next Follow-up</span>
+                        <span className="text-xs">Follow-up</span>
                       </div>
                       <p className="font-semibold">{formatDate(selectedAccount.nextFollowUpDate)}</p>
                     </div>
@@ -862,67 +793,113 @@ export default function AccountDrawer() {
                 </div>
               )}
 
-              {/* Status Update */}
-              <div className="space-y-2 pb-[15px]">
-                <h3 className="text-sm font-semibold text-muted-foreground uppercase tracking-wider">
-                  Update Status
-                </h3>
-                <Select
-                  value={selectedAccount.accountStatus}
-                  onValueChange={(value) => {
-                    const newStatus = value as AccountStatus;
-                    const previousStatus = selectedAccount.accountStatus;
-                    updateAccountStatus(selectedAccount.id, newStatus); // optimistic UI update
-                    updateAccountStatusMutation.mutate(
-                      { accountId: selectedAccount.id, status: newStatus },
-                      {
-                        onError: (err) => {
-                          updateAccountStatus(selectedAccount.id, previousStatus); // revert on failure
-                          toast.error(`Failed to update status: ${err instanceof Error ? err.message : 'unknown error'}`);
-                        },
-                      },
-                    );
-                  }}
-                  disabled={isPreview}
-                >
-                  <SelectTrigger className="w-full">
-                    <SelectValue />
-                  </SelectTrigger>
-                  <SelectContent>
-                    {Object.entries(statusConfig).map(([key, value]) => (
-                      <SelectItem key={key} value={key}>
-                        <div className="flex items-center gap-2">
-                          <div 
-                            className="w-2.5 h-2.5 rounded-full"
-                            style={{ backgroundColor: value.color }}
-                          />
-                          {value.label}
-                        </div>
-                      </SelectItem>
-                    ))}
-                  </SelectContent>
-                </Select>
-              </div>
+              {/* Log activity — one boxed card: when, activity type, owner, notes */}
+              <div className="glass-card p-4 space-y-4">
+                <h3 className="text-sm font-bold text-foreground">Log activity</h3>
 
-              <div className="space-y-2 pb-[15px]">
-                <h3 className="text-sm font-semibold text-muted-foreground uppercase tracking-wider">
-                  <span className="text-destructive">*</span> Event Type
-                </h3>
-                <Select value={eventType} onValueChange={(v) => {
-                  setEventType(v);
-                  if (v === 'Drop By') setEventMedium('In-Person');
-                }}>
-                  <SelectTrigger className="w-full">
-                    <SelectValue placeholder="Select event type" />
-                  </SelectTrigger>
-                  <SelectContent>
-                    {eventTypeOptions.map((opt) => (
-                      <SelectItem key={opt} value={opt}>
-                        {opt}
+                <div className="grid grid-cols-2 gap-3">
+                  <div className="space-y-1">
+                    <label className="text-xs text-muted-foreground">Date</label>
+                    <Popover>
+                      <PopoverTrigger asChild>
+                        <Button
+                          variant="outline"
+                          className={cn("w-full justify-between font-normal", !startDate && "text-muted-foreground")}
+                        >
+                          {startDate ? format(startDate, 'MMM d, yyyy') : 'Pick a date'}
+                          <CalendarIcon className="h-4 w-4 opacity-50" />
+                        </Button>
+                      </PopoverTrigger>
+                      <PopoverContent className="w-auto p-0" align="start">
+                        <CalendarPicker
+                          mode="single"
+                          selected={startDate}
+                          onSelect={(d) => d && setStartDate(d)}
+                          initialFocus
+                          className={cn("p-3 pointer-events-auto")}
+                        />
+                      </PopoverContent>
+                    </Popover>
+                  </div>
+                  <div className="space-y-1">
+                    <label className="text-xs text-muted-foreground">Time</label>
+                    <div className="relative">
+                      <Input
+                        type="time"
+                        value={startTime}
+                        onChange={(e) => setStartTime(e.target.value)}
+                        className="pr-9"
+                      />
+                      <Clock className="absolute right-3 top-1/2 -translate-y-1/2 h-4 w-4 opacity-50 pointer-events-none" />
+                    </div>
+                  </div>
+                </div>
+
+                <div className="space-y-2">
+                  <label className="text-xs text-muted-foreground">Activity type</label>
+                  {isCreatingActivityType ? (
+                  <div className="flex items-center gap-2">
+                    <Input
+                      autoFocus
+                      value={customActivityLabel}
+                      onChange={(e) => setCustomActivityLabel(e.target.value)}
+                      placeholder="New activity type"
+                      onKeyDown={(e) => {
+                        if (e.key !== 'Enter' || !customActivityLabel.trim()) return;
+                        createActivityType.mutate(customActivityLabel, {
+                          onSuccess: (label) => {
+                            setEventType(label);
+                            setCustomActivityLabel('');
+                            setIsCreatingActivityType(false);
+                          },
+                        });
+                      }}
+                    />
+                    <Button
+                      size="sm"
+                      disabled={!customActivityLabel.trim() || createActivityType.isPending}
+                      onClick={() =>
+                        createActivityType.mutate(customActivityLabel, {
+                          onSuccess: (label) => {
+                            setEventType(label);
+                            setCustomActivityLabel('');
+                            setIsCreatingActivityType(false);
+                          },
+                        })
+                      }
+                    >
+                      Add
+                    </Button>
+                    <Button size="sm" variant="ghost" onClick={() => setIsCreatingActivityType(false)}>
+                      Cancel
+                    </Button>
+                  </div>
+                ) : (
+                  <Select
+                    value={eventType}
+                    onValueChange={(v) => {
+                      if (v === '__create_custom__') {
+                        setIsCreatingActivityType(true);
+                        return;
+                      }
+                      setEventType(v);
+                    }}
+                  >
+                    <SelectTrigger className="w-full">
+                      <SelectValue placeholder="Select activity type" />
+                    </SelectTrigger>
+                    <SelectContent>
+                      {eventTypeOptions.map((opt) => (
+                        <SelectItem key={opt} value={opt}>
+                          {opt}
+                        </SelectItem>
+                      ))}
+                      <SelectItem value="__create_custom__" className="text-primary font-medium">
+                        + Create custom activity
                       </SelectItem>
-                    ))}
-                  </SelectContent>
-                </Select>
+                    </SelectContent>
+                  </Select>
+                )}
               </div>
 
               {/* Quote Created — service(s) quoted + price */}
@@ -993,30 +970,9 @@ export default function AccountDrawer() {
                 </>
               )}
 
-              {/* Event Medium */}
-              <div className="space-y-2 pb-[15px]">
-                <h3 className="text-sm font-semibold text-muted-foreground uppercase tracking-wider">
-                  <span className="text-destructive">*</span> Event Medium
-                </h3>
-                <Select value={eventMedium} onValueChange={setEventMedium}>
-                  <SelectTrigger className="w-full">
-                    <SelectValue placeholder="Select event medium" />
-                  </SelectTrigger>
-                  <SelectContent>
-                    {eventMediumOptions.map((opt) => (
-                      <SelectItem key={opt} value={opt}>
-                        {opt}
-                      </SelectItem>
-                    ))}
-                  </SelectContent>
-                </Select>
-              </div>
-
-              {/* Assigned To */}
-              <div className="space-y-2 pb-[15px]">
-                <h3 className="text-sm font-semibold text-muted-foreground uppercase tracking-wider">
-                  <span className="text-destructive">*</span> Assigned To
-                </h3>
+              {/* Account Owner */}
+              <div className="space-y-2">
+                <label className="text-xs text-muted-foreground">Account owner</label>
                 <Select value={assignedTo} onValueChange={setAssignedTo}>
                   <SelectTrigger className="w-full">
                     <SelectValue placeholder="Select assignee" />
@@ -1031,160 +987,58 @@ export default function AccountDrawer() {
                 </Select>
               </div>
 
-              {/* Start Date/Time */}
-              <div className="space-y-2 pb-[15px]">
-                <h3 className="text-sm font-bold text-foreground">Start</h3>
-                <div className="grid grid-cols-2 gap-3">
-                  <div className="space-y-1">
-                    <label className="text-xs text-muted-foreground">
-                      <span className="text-destructive">*</span> Date
-                    </label>
-                    <Popover>
-                      <PopoverTrigger asChild>
+              {/* Notes + Log activity button */}
+              <div className="space-y-2">
+                <label className="text-xs text-muted-foreground">Notes</label>
+                <Textarea
+                  placeholder="What happened during this visit?"
+                  value={visitNotes}
+                  onChange={(e) => setVisitNotes(e.target.value)}
+                  className="min-h-[80px] resize-none"
+                />
+                <TooltipProvider>
+                  <Tooltip>
+                    <TooltipTrigger asChild>
+                      <span className={cn("block w-full", !canLog && "cursor-not-allowed")}>
                         <Button
-                          variant="outline"
-                          className={cn("w-full justify-between font-normal", !startDate && "text-muted-foreground")}
-                        >
-                          {startDate ? format(startDate, 'MMM d, yyyy') : 'Pick a date'}
-                          <CalendarIcon className="h-4 w-4 opacity-50" />
-                        </Button>
-                      </PopoverTrigger>
-                      <PopoverContent className="w-auto p-0" align="start">
-                        <CalendarPicker
-                          mode="single"
-                          selected={startDate}
-                          onSelect={(d) => {
-                            if (!d) return;
-                            setStartDate(d);
-                            setEndDate((prev) => {
-                              const next = new Date(prev);
-                              next.setFullYear(d.getFullYear(), d.getMonth(), d.getDate());
-                              return next;
-                            });
+                          size="sm"
+                          className="w-full gap-2"
+                          disabled={!canLog}
+                          onClick={() => {
+                            if (!canLog) {
+                              toast.error(disabledReason);
+                              return;
+                            }
+                            handleLogVisit();
                           }}
-                          initialFocus
-                          className={cn("p-3 pointer-events-auto")}
-                        />
-                      </PopoverContent>
-                    </Popover>
-                  </div>
-                  <div className="space-y-1">
-                    <label className="text-xs text-muted-foreground">
-                      <span className="text-destructive">*</span> Time
-                    </label>
-                    <div className="relative">
-                      <Input
-                        type="time"
-                        value={startTime}
-                        onChange={(e) => setStartTime(e.target.value)}
-                        className="pr-9"
-                      />
-                      <Clock className="absolute right-3 top-1/2 -translate-y-1/2 h-4 w-4 opacity-50 pointer-events-none" />
-                    </div>
-                  </div>
-                </div>
-              </div>
-
-              {/* End Date/Time */}
-              <div className="space-y-2 pb-[15px]">
-                <h3 className="text-sm font-bold text-foreground">End</h3>
-                <div className="grid grid-cols-2 gap-3">
-                  <div className="space-y-1">
-                    <label className="text-xs text-muted-foreground">
-                      <span className="text-destructive">*</span> Date
-                    </label>
-                    <Popover>
-                      <PopoverTrigger asChild>
-                        <Button
-                          variant="outline"
-                          className={cn("w-full justify-between font-normal", !endDate && "text-muted-foreground")}
                         >
-                          {endDate ? format(endDate, 'MMM d, yyyy') : 'Pick a date'}
-                          <CalendarIcon className="h-4 w-4 opacity-50" />
+                          <ClipboardCheck className="w-4 h-4" />
+                          Log activity
                         </Button>
-                      </PopoverTrigger>
-                      <PopoverContent className="w-auto p-0" align="start">
-                        <CalendarPicker
-                          mode="single"
-                          selected={endDate}
-                          onSelect={(d) => d && setEndDate(d)}
-                          initialFocus
-                          className={cn("p-3 pointer-events-auto")}
-                        />
-                      </PopoverContent>
-                    </Popover>
-                  </div>
-                  <div className="space-y-1">
-                    <label className="text-xs text-muted-foreground">
-                      <span className="text-destructive">*</span> Time
-                    </label>
-                    <div className="relative">
-                      <Input
-                        type="time"
-                        value={endTime}
-                        onChange={(e) => setEndTime(e.target.value)}
-                        className="pr-9"
-                      />
-                      <Clock className="absolute right-3 top-1/2 -translate-y-1/2 h-4 w-4 opacity-50 pointer-events-none" />
-                    </div>
-                  </div>
-                </div>
-                {endBeforeStart && (
-                  <p className="text-xs text-destructive">End must be after start.</p>
-                )}
+                      </span>
+                    </TooltipTrigger>
+                    {!canLog && (
+                      <TooltipContent>
+                        <p>{disabledReason}</p>
+                      </TooltipContent>
+                    )}
+                  </Tooltip>
+                </TooltipProvider>
+              </div>
               </div>
 
-              {/* Visit Notes */}
-              <div className="space-y-3">
-                <h3 className="text-sm font-semibold text-muted-foreground uppercase tracking-wider">
-                  Notes
-                </h3>
+              {/* Recent Activity — compact, un-boxed feed below the Log activity card */}
+              {accountEvents.length > 0 && (
                 <div className="space-y-2">
-                  <Textarea
-                    placeholder="What happened during this visit?"
-                    value={visitNotes}
-                    onChange={(e) => setVisitNotes(e.target.value)}
-                    className="min-h-[80px] resize-none"
-                  />
-                  <TooltipProvider>
-                    <Tooltip>
-                      <TooltipTrigger asChild>
-                        <span className={cn("block w-full", !canLog && "cursor-not-allowed")}>
-                          <Button
-                            size="sm"
-                            className="w-full gap-2"
-                            disabled={!canLog}
-                            onClick={() => {
-                              if (!canLog) {
-                                toast.error(disabledReason);
-                                return;
-                              }
-                              handleLogVisit();
-                            }}
-                          >
-                            <ClipboardCheck className="w-4 h-4" />
-                            Log Event
-                          </Button>
-                        </span>
-                      </TooltipTrigger>
-                      {!canLog && (
-                        <TooltipContent>
-                          <p>{disabledReason}</p>
-                        </TooltipContent>
-                      )}
-                    </Tooltip>
-                  </TooltipProvider>
-                </div>
-
-                {accountEvents.length > 0 && (
-                  <div className="space-y-2">
-                    <h4 className="text-xs font-semibold text-muted-foreground uppercase tracking-wider">Recent Activity</h4>
-                    <div className="space-y-1.5">
-                      {accountEvents.map((ev) => (
-                        <div key={ev.id} className="bg-muted/50 rounded-lg p-2">
+                  <h3 className="text-sm font-semibold text-muted-foreground uppercase tracking-wider">Recent Activity</h3>
+                  <div className="space-y-1.5">
+                    {accountEvents.map((ev) => (
+                      <div key={ev.id} className="flex items-start gap-2">
+                        <span className="w-1.5 h-1.5 rounded-full bg-primary mt-1.5 flex-shrink-0" />
+                        <div className="min-w-0">
                           <p className="text-xs font-medium truncate">{ev.event_type}</p>
                           <p className="text-[11px] text-muted-foreground truncate">
-                            {format(new Date(ev.start_at), 'MMM d, h:mm a')} · {ev.assigned_to}
+                            {format(new Date(ev.start_at), 'MMM d, yyyy')} · {ev.assigned_to}
                           </p>
                           {ev.event_type === 'Quote Created' && (
                             <p className="text-[11px] text-muted-foreground truncate mt-0.5">
@@ -1201,11 +1055,14 @@ export default function AccountDrawer() {
                             </p>
                           )}
                         </div>
-                      ))}
-                    </div>
+                      </div>
+                    ))}
                   </div>
-                )}
+                </div>
+              )}
 
+              {/* Account Notes (add/edit/delete free-text log, separate from Recent Activity) */}
+              <div className="space-y-2">
                 {notesLoading ? (
                   <p className="text-sm text-muted-foreground">Loading notes...</p>
                 ) : accountNotes.length === 0 ? (
@@ -1283,6 +1140,139 @@ export default function AccountDrawer() {
                 )}
               </div>
 
+              {/* Contacts (found via Prospeo, persisted per account) */}
+              {!isPreview && (
+                <div className="space-y-2">
+                  <h3 className="text-sm font-semibold text-muted-foreground uppercase tracking-wider">
+                    Contacts{savedContacts.length > 0 ? ` (${savedContacts.length})` : ''}
+                  </h3>
+
+                  {savedContacts.map((contact) => {
+                    const revealing = revealingField[contact.id];
+                    return (
+                      <div key={contact.id} className="glass-card p-3 space-y-1.5">
+                        <div className="flex items-center justify-between">
+                          <div>
+                            <p className="text-sm font-medium">{contact.first_name} {contact.last_name}</p>
+                            {contact.title && <p className="text-xs text-muted-foreground">{contact.title}</p>}
+                          </div>
+                          {contact.linkedin_url && (
+                            <a
+                              href={/^https?:\/\//i.test(contact.linkedin_url) ? contact.linkedin_url : `https://${contact.linkedin_url}`}
+                              target="_blank"
+                              rel="noopener noreferrer"
+                              className="text-xs text-primary flex-shrink-0"
+                            >
+                              LinkedIn
+                            </a>
+                          )}
+                        </div>
+
+                        <div className="flex items-center justify-between text-xs pt-1">
+                          <span className="text-muted-foreground">Email</span>
+                          {contact.email ? (
+                            <span className="truncate max-w-[180px]">{contact.email}</span>
+                          ) : (
+                            <button
+                              onClick={() => handleRevealEmail(contact)}
+                              disabled={!!revealing}
+                              className="text-primary hover:underline disabled:opacity-60"
+                            >
+                              {revealing === 'email' ? 'Revealing…' : 'Reveal email'}
+                            </button>
+                          )}
+                        </div>
+                        <div className="flex items-center justify-between text-xs">
+                          <span className="text-muted-foreground">Mobile</span>
+                          {contact.phone ? (
+                            <span>{contact.phone}</span>
+                          ) : contact.email ? (
+                            <button
+                              onClick={() => handleRevealPhone(contact)}
+                              disabled={!!revealing}
+                              className="text-primary hover:underline disabled:opacity-60"
+                            >
+                              {revealing === 'phone' ? 'Revealing…' : 'Reveal mobile'}
+                            </button>
+                          ) : (
+                            <span className="text-muted-foreground">Reveal email first</span>
+                          )}
+                        </div>
+                      </div>
+                    );
+                  })}
+
+                  <button
+                    onClick={handleFindContacts}
+                    disabled={findingContacts}
+                    className="w-full inline-flex items-center justify-center gap-1.5 text-sm bg-primary/10 text-primary rounded-lg py-2 hover:bg-primary/20 transition-colors disabled:opacity-60"
+                  >
+                    {findingContacts ? (
+                      <Loader2 className="w-3.5 h-3.5 animate-spin" />
+                    ) : (
+                      <UserSearch className="w-3.5 h-3.5" />
+                    )}
+                    {findingContacts ? 'Searching…' : savedContacts.length > 0 ? 'Find another contact' : 'Find contacts'}
+                  </button>
+                </div>
+              )}
+
+              {/* Secondary Contacts */}
+              {secondaryContacts.length > 0 && (
+                <div className="space-y-2">
+                  <h3 className="text-sm font-semibold text-muted-foreground uppercase tracking-wider">
+                    Secondary Contacts ({secondaryContacts.length})
+                  </h3>
+                  <div className="space-y-2">
+                    {secondaryContacts.map((contact) => (
+                      <div key={contact.id} className="glass-card p-3 space-y-2">
+                        <div className="flex items-center gap-3">
+                          <div className="w-8 h-8 bg-primary/10 rounded-full flex items-center justify-center">
+                            <User className="w-4 h-4 text-primary" />
+                          </div>
+                          <div className="min-w-0">
+                            <p className="font-semibold text-sm text-foreground truncate">
+                              {getContactDisplayName(contact) || <span className="italic text-muted-foreground font-normal">No named contact</span>}
+                            </p>
+                            <p className="text-xs text-muted-foreground">{contact.jobTitle || '—'}</p>
+                          </div>
+                        </div>
+                        <div className="grid gap-1 pl-11">
+                          {contact.mainPhone ? (
+                            <a
+                              href={`tel:${contact.mainPhone}`}
+                              className="flex items-center gap-2 p-1.5 rounded-lg hover:bg-muted transition-colors group"
+                            >
+                              <Phone className="w-3.5 h-3.5 text-muted-foreground group-hover:text-primary" />
+                              <span className="text-xs">{contact.mainPhone}</span>
+                            </a>
+                          ) : (
+                            <div className="flex items-center gap-2 p-1.5">
+                              <Phone className="w-3.5 h-3.5 text-muted-foreground" />
+                              <span className="text-xs text-muted-foreground">—</span>
+                            </div>
+                          )}
+                          {contact.mainEmail ? (
+                            <a
+                              href={`mailto:${contact.mainEmail}`}
+                              className="flex items-center gap-2 p-1.5 rounded-lg hover:bg-muted transition-colors group"
+                            >
+                              <Mail className="w-3.5 h-3.5 text-muted-foreground group-hover:text-primary" />
+                              <span className="text-xs truncate">{contact.mainEmail}</span>
+                            </a>
+                          ) : (
+                            <div className="flex items-center gap-2 p-1.5">
+                              <Mail className="w-3.5 h-3.5 text-muted-foreground" />
+                              <span className="text-xs text-muted-foreground">—</span>
+                            </div>
+                          )}
+                        </div>
+                      </div>
+                    ))}
+                  </div>
+                </div>
+              )}
+
               {/* Legacy Notes (QB "Company" column, rolled up over visits) */}
               {selectedAccount.accountNotes && (
                 <div className="space-y-2">
@@ -1299,24 +1289,6 @@ export default function AccountDrawer() {
 
             {/* Footer Actions */}
             <div className="p-4 border-t bg-card safe-bottom space-y-3">
-              <Button
-                variant="outline"
-                className="w-full gap-2 border-status-active/40 text-status-active hover:bg-status-active/10 hover:text-status-active"
-                onClick={() => openAroundMeWithOrigin({ kind: 'account', accountId: selectedAccount.id })}
-                disabled={isPreview}
-              >
-                <Binoculars className="w-4 h-4" />
-                Search around this account
-              </Button>
-              <Button
-                variant="outline"
-                className="w-full gap-2"
-                onClick={() => window.open(`https://maps.google.com/?q=${encodeURIComponent(selectedAccount.routeAddress ?? '')}`, '_blank')}
-              >
-                <MapPin className="w-4 h-4" />
-                Directions
-              </Button>
-
               {/* Delete Button */}
               {!isPreview && (
               <AlertDialog>
@@ -1326,7 +1298,7 @@ export default function AccountDrawer() {
                     className="w-full gap-2 text-destructive hover:text-destructive hover:bg-destructive/10"
                   >
                     <Trash2 className="w-4 h-4" />
-                    Delete Account
+                    Delete account
                   </Button>
                 </AlertDialogTrigger>
                 <AlertDialogContent>

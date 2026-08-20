@@ -19,6 +19,7 @@ import {
   ALL_SERVICE_FILTER_OPTIONS,
   FULL_SERVICE_CONFIG,
 } from '@/types/account';
+import { useTags } from '@/hooks/useTags';
 import { cn } from '@/lib/utils';
 
 interface Props {
@@ -87,6 +88,60 @@ function MultiSelect<T extends string>({
   );
 }
 
+// Tags are a dynamic, user-created list (unlike the fixed status/service
+// unions), so this doesn't reuse the generic MultiSelect<T extends string>
+// above — it needs to look each id up in useTags() for its label/color.
+function TagsMultiSelect({ selected, onChange }: { selected: string[]; onChange: (v: string[]) => void }) {
+  const { data: tags = [] } = useTags();
+  const [open, setOpen] = useState(false);
+  const toggle = (id: string) => {
+    onChange(selected.includes(id) ? selected.filter((x) => x !== id) : [...selected, id]);
+  };
+  const byId = new Map(tags.map((t) => [t.id, t]));
+
+  return (
+    <Popover open={open} onOpenChange={setOpen}>
+      <PopoverTrigger asChild>
+        <button
+          className={cn(
+            'w-full h-auto min-h-8 px-2 py-1 rounded-md border border-sidebar-border bg-sidebar text-left text-xs flex items-center justify-between gap-1',
+          )}
+        >
+          {selected.length === 0 ? (
+            <span className="text-sidebar-muted">Select tags…</span>
+          ) : (
+            <div className="flex flex-wrap gap-1">
+              {selected.map((id) => (
+                <Badge key={id} variant="secondary" className="text-[10px] px-1.5 py-0">
+                  {byId.get(id)?.label ?? id}
+                </Badge>
+              ))}
+            </div>
+          )}
+          <ChevronDown className="w-3 h-3 text-sidebar-muted shrink-0" />
+        </button>
+      </PopoverTrigger>
+      <PopoverContent className="w-56 p-1.5" align="start">
+        <div className="space-y-0.5 max-h-64 overflow-y-auto">
+          {tags.length === 0 && (
+            <p className="px-2 py-1.5 text-xs text-sidebar-muted">No tags created yet.</p>
+          )}
+          {tags.map((tag) => (
+            <label
+              key={tag.id}
+              className="flex items-center gap-2 px-2 py-1.5 rounded hover:bg-accent cursor-pointer text-sm"
+            >
+              <Checkbox checked={selected.includes(tag.id)} onCheckedChange={() => toggle(tag.id)} />
+              <span className="w-1.5 h-1.5 rounded-full" style={{ backgroundColor: tag.color }} />
+              <span>{tag.label}</span>
+            </label>
+          ))}
+        </div>
+      </PopoverContent>
+    </Popover>
+  );
+}
+
 function TagInput({ values, onChange }: { values: string[]; onChange: (v: string[]) => void }) {
   const [draft, setDraft] = useState('');
   const commit = () => {
@@ -147,6 +202,10 @@ export default function ValueInput({ field, operator, value, onChange }: Props) 
         labelFor={serviceOptionLabel}
       />
     );
+  }
+
+  if (meta.type === 'enum-tags' && value.kind === 'tags') {
+    return <TagsMultiSelect selected={value.values} onChange={(v) => onChange({ kind: 'tags', values: v })} />;
   }
 
   // Text fields

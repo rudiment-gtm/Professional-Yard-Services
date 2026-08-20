@@ -2,6 +2,7 @@ import { useEffect } from 'react';
 import { useAppStore } from '@/store/appStore';
 import { useAccounts } from '@/hooks/useAccounts';
 import FilterSidebar from '@/components/FilterSidebar';
+import MapToolbar from '@/components/MapToolbar';
 import AccountMap from '@/components/AccountMap';
 import AccountDrawer from '@/components/AccountDrawer';
 import MapHeader from '@/components/MapHeader';
@@ -57,7 +58,8 @@ const Index = () => {
         {/* Map tab — stays mounted so switching tabs never re-initializes Mapbox */}
         <div className={cn('h-full', activeTab === 'map' ? 'block' : 'hidden')}>
           <MapHeader />
-          <div className="h-full pt-14">
+          <MapToolbar />
+          <div className="h-full pt-[100px] mr-0 md:mr-14">
             <AccountMap />
           </div>
         </div>

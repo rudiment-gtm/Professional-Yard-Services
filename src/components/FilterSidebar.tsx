@@ -5,19 +5,26 @@ import {
   X,
   Navigation,
   Binoculars,
-  Filter,
   Plus,
   Pencil,
-  Bookmark,
+  MessageSquare,
+  Map as MapIcon,
+  Radar,
+  Users,
 } from 'lucide-react';
 import AroundMeDialog from '@/components/AroundMeDialog';
 import RouteOverviewDialog from '@/components/RouteOverviewDialog';
 import SavedRoutesDialog from '@/components/SavedRoutesDialog';
-import { useAppStore, useFilteredAccounts } from '@/store/appStore';
+import { useAppStore } from '@/store/appStore';
 import { Button } from '@/components/ui/button';
-import { Tooltip, TooltipContent, TooltipTrigger } from '@/components/ui/tooltip';
 import { cn } from '@/lib/utils';
-import AdvancedFilterPanel from '@/components/filters/AdvancedFilterPanel';
+
+const NAV_ITEMS = [
+  { tab: 'chat', label: 'Chat', icon: MessageSquare },
+  { tab: 'map', label: 'Map', icon: MapIcon },
+  { tab: 'prospect', label: 'Prospect', icon: Radar },
+  { tab: 'contacts', label: 'Contacts', icon: Users },
+] as const;
 
 // Display-only — no real usage tracking wired up yet. Swap for a real query
 // if/when Prospeo/Clay usage is actually metered per-team.
@@ -47,7 +54,6 @@ export default function FilterSidebar() {
   } = useAppStore();
 
   const hasAroundMeResults = aroundMeResults.length > 0;
-  const filteredAccounts = useFilteredAccounts();
   const creditsPct = Math.round((CREDITS_USED / CREDITS_TOTAL) * 100);
 
   // Generate Google Maps URL with waypoints - always starting from user's current location
@@ -133,61 +139,33 @@ export default function FilterSidebar() {
             )}
           </div>
 
-          {/* Tabs */}
+          {/* Primary navigation — icon + label rail. Stats and filters for
+              the Map tab now live in the map toolbar (MapToolbar.tsx), not
+              here, so this stays a single consistent nav list. */}
           {isSidebarOpen && (
-            <div className="p-2 border-b border-sidebar-border grid grid-cols-2 gap-1">
-              {([
-                ['chat', 'Chat'],
-                ['map', 'Map'],
-                ['prospect', 'Prospect'],
-                ['contacts', 'Contacts'],
-              ] as const).map(([tab, label]) => (
+            <nav className="p-2 border-b border-sidebar-border space-y-0.5">
+              {NAV_ITEMS.map(({ tab, label, icon: Icon }) => (
                 <button
                   key={tab}
                   onClick={() => setActiveTab(tab)}
                   className={cn(
-                    'text-sm font-medium py-1.5 rounded-md transition-colors',
+                    'w-full flex items-center gap-2.5 px-3 py-2 rounded-md text-sm font-medium transition-colors',
                     activeTab === tab
                       ? 'bg-sidebar-primary text-sidebar-primary-foreground'
-                      : 'text-sidebar-muted hover:text-sidebar-foreground'
+                      : 'text-sidebar-muted hover:text-sidebar-foreground hover:bg-sidebar-accent'
                   )}
                 >
+                  <Icon className="w-4 h-4 shrink-0" />
                   {label}
                 </button>
               ))}
-            </div>
+            </nav>
           )}
 
-          {/* Stats Summary */}
-          {isSidebarOpen && (
-            <div className="p-4 border-b border-sidebar-border">
-              <div className="grid grid-cols-2 gap-2">
-                <div className="bg-sidebar-accent rounded-lg p-3 text-center">
-                  <div className="text-2xl font-bold text-sidebar-foreground">{accounts.length}</div>
-                  <div className="text-xs text-sidebar-muted">Total Accounts</div>
-                </div>
-                <div className="bg-sidebar-accent rounded-lg p-3 text-center">
-                  <div className="text-2xl font-bold text-sidebar-foreground">{filteredAccounts.length}</div>
-                  <div className="text-xs text-sidebar-muted">Showing</div>
-                </div>
-              </div>
-            </div>
-          )}
-
-          {/* Filters */}
-          {activeTab === 'map' && (
-          <div className="flex-1 overflow-y-auto p-4 scrollbar-hide">
-            {isSidebarOpen ? (
-              <AdvancedFilterPanel />
-            ) : (
+          {/* Collapsed-sidebar quick actions (Map tab only) */}
+          {activeTab === 'map' && !isSidebarOpen && (
+            <div className="flex-1 overflow-y-auto p-4 scrollbar-hide">
               <div className="flex flex-col items-center gap-4 pt-4">
-                <button
-                  onClick={toggleSidebar}
-                  title="Filters"
-                  className="touch-button rounded-lg bg-sidebar-accent text-sidebar-foreground hover:bg-sidebar-accent/80 transition-all"
-                >
-                  <Filter className="w-5 h-5" />
-                </button>
                 <button
                   onClick={openAddAccountManual}
                   title="Add Account"
@@ -220,8 +198,7 @@ export default function FilterSidebar() {
                 </button>
                 <SavedRoutesDialog />
               </div>
-            )}
-          </div>
+            </div>
           )}
 
           {/* Route Mode Panel — Around Me / Route Mode / Saved Routes triggers

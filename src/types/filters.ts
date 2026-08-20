@@ -3,6 +3,7 @@ import { AccountStatus, ServiceFilterOption } from './account';
 export type FilterField =
   | 'status'
   | 'services'
+  | 'tags'
   | 'city'
   | 'state'
   | 'lastVisitDate'
@@ -36,6 +37,7 @@ export type FilterValue =
   | { kind: 'strings'; values: string[] }
   | { kind: 'statuses'; values: AccountStatus[] }
   | { kind: 'services'; values: ServiceFilterOption[] }
+  | { kind: 'tags'; values: string[] }
   | { kind: 'text'; value: string }
   | { kind: 'number'; value: number | null }
   | { kind: 'numberRange'; min: number | null; max: number | null }
@@ -60,7 +62,7 @@ export type AdvancedFilters = FilterGroup[];
 export interface FieldMeta {
   field: FilterField;
   label: string;
-  type: 'enum-status' | 'enum-services' | 'text' | 'number' | 'date';
+  type: 'enum-status' | 'enum-services' | 'enum-tags' | 'text' | 'number' | 'date';
   operators: FilterOperator[];
   defaultOperator: FilterOperator;
 }
@@ -77,6 +79,13 @@ export const FIELD_META: Record<FilterField, FieldMeta> = {
     field: 'services',
     label: 'Services',
     type: 'enum-services',
+    operators: ['in', 'not_in'],
+    defaultOperator: 'in',
+  },
+  tags: {
+    field: 'tags',
+    label: 'Tag',
+    type: 'enum-tags',
     operators: ['in', 'not_in'],
     defaultOperator: 'in',
   },
@@ -137,6 +146,8 @@ export function defaultValueFor(field: FilterField, op: FilterOperator): FilterV
       return { kind: 'statuses', values: [] };
     case 'enum-services':
       return { kind: 'services', values: [] };
+    case 'enum-tags':
+      return { kind: 'tags', values: [] };
     case 'text':
       if (op === 'contains') return { kind: 'text', value: '' };
       return { kind: 'strings', values: [] };

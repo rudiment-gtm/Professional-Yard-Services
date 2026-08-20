@@ -27,6 +27,10 @@ export interface Account {
   accountStatus: AccountStatus;
   cancelDate?: string | null;   // no source data on import; set manually going forward
 
+  // Tag ids from the shared, user-created tags taxonomy (see useTags.ts).
+  // Populated via a bulk account_tags join in useAccounts, not its own column.
+  tags: string[];
+
   // Two distinct addresses — QB's "Bill to" vs "Ship to" (the job site the rep actually drives to)
   billingAddress?: string;
   billingCity?: string;

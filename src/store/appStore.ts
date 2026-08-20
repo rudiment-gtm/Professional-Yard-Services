@@ -41,6 +41,13 @@ export type RouteStop =
 
 const aroundMeStopId = (resultId: string) => `am:${resultId}`;
 
+// Sort applied to the map toolbar's filtered account list.
+export type MapSortColumn = 'accountName' | 'status' | 'city' | 'lastVisitDate';
+export interface MapSortState {
+  column: MapSortColumn;
+  direction: 'asc' | 'desc';
+}
+
 // Quick-filter toggles shown as pills in the sidebar — one per status/service value.
 export interface StatusFilterState {
   lead: boolean;
@@ -73,6 +80,9 @@ interface AppState {
 
   // List-view-only advanced filter builder (ephemeral, not persisted)
   listAdvancedFilters: FilterGroup[];
+
+  // Sort applied to the map toolbar's filtered account list
+  mapSort: MapSortState | null;
 
   // Route planning
   isRouteModeActive: boolean;
@@ -131,6 +141,7 @@ interface AppState {
   removeListFilterCondition: (groupId: string, condId: string) => void;
   clearListAdvancedFilters: () => void;
   setListAdvancedFilters: (groups: FilterGroup[]) => void;
+  setMapSort: (sort: MapSortState | null) => void;
 
   toggleRouteMode: () => void;
   toggleAccountForRoute: (accountId: string) => void;
@@ -145,6 +156,7 @@ interface AppState {
   setDrawerOpen: (open: boolean) => void;
   setMapView: (center: [number, number], zoom: number) => void;
   updateAccountStatus: (accountId: string, status: AccountStatus) => void;
+  updateAccountFields: (accountId: string, patch: Partial<Account>) => void;
   logVisit: (accountId: string, notes?: string) => void;
   setAccounts: (accounts: Account[]) => void;
   setUserLocation: (location: [number, number] | null) => void;
@@ -177,6 +189,7 @@ export const useAppStore = create<AppState>((set, get) => ({
   advancedFilters: [],
   filtersHydrated: false,
   listAdvancedFilters: [],
+  mapSort: null,
 
   isRouteModeActive: false,
   routeStops: [],
@@ -321,6 +334,7 @@ export const useAppStore = create<AppState>((set, get) => ({
   })),
   clearListAdvancedFilters: () => set({ listAdvancedFilters: [] }),
   setListAdvancedFilters: (groups) => set({ listAdvancedFilters: groups }),
+  setMapSort: (sort) => set({ mapSort: sort }),
 
   toggleRouteMode: () => set((state) => {
     const turningOff = state.isRouteModeActive;
@@ -420,22 +434,36 @@ export const useAppStore = create<AppState>((set, get) => ({
       : state.selectedAccount,
   })),
 
+  // Patches any subset of an account's fields in both the accounts list and
+  // the currently open drawer's selectedAccount, so edits (e.g. the contact
+  // record dialog) show up immediately instead of needing a page reload.
+  updateAccountFields: (accountId, patch) => set((state) => ({
+    accounts: state.accounts.map(account =>
+      account.id === accountId ? { ...account, ...patch } : account
+    ),
+    selectedAccount: state.selectedAccount?.id === accountId
+      ? { ...state.selectedAccount, ...patch }
+      : state.selectedAccount,
+  })),
+
   // NOTE: Optimistic local-only update. Source of truth is the DB; values
   // get reconciled on the next React Query refetch. The real persistence
   // happens via useLogVisit() / AccountDrawer.
   logVisit: (accountId, notes) => set((state) => {
     const now = new Date().toISOString().split('T')[0];
+    const applyPatch = (account: Account) => ({
+      ...account,
+      visitCount: account.visitCount + 1,
+      lastVisitDate: now,
+      accountNotes: notes ? `${now}: ${notes}\n\n${account.accountNotes || ''}` : account.accountNotes,
+    });
     return {
       accounts: state.accounts.map(account =>
-        account.id === accountId
-          ? {
-              ...account,
-              visitCount: account.visitCount + 1,
-              lastVisitDate: now,
-              accountNotes: notes ? `${now}: ${notes}\n\n${account.accountNotes || ''}` : account.accountNotes,
-            }
-          : account
+        account.id === accountId ? applyPatch(account) : account
       ),
+      selectedAccount: state.selectedAccount?.id === accountId
+        ? applyPatch(state.selectedAccount)
+        : state.selectedAccount,
     };
   }),
 
@@ -468,9 +496,29 @@ export const useAppStore = create<AppState>((set, get) => ({
   setUserLocation: (location) => set({ userLocation: location }),
 }));
 
-// Selector for filtered accounts — uses the advanced filter builder
+// Selector for filtered accounts — uses the advanced filter builder, then
+// applies the map toolbar's sort (if any) on top.
 export const useFilteredAccounts = () => {
   const accounts = useAppStore((s) => s.accounts);
   const advancedFilters = useAppStore((s) => s.advancedFilters);
-  return accounts.filter((account) => evaluateFilters(account, advancedFilters));
+  const mapSort = useAppStore((s) => s.mapSort);
+  const filtered = accounts.filter((account) => evaluateFilters(account, advancedFilters));
+  if (!mapSort) return filtered;
+
+  const dir = mapSort.direction === 'asc' ? 1 : -1;
+  return [...filtered].sort((a, b) => {
+    switch (mapSort.column) {
+      case 'accountName':
+        return a.accountName.localeCompare(b.accountName) * dir;
+      case 'status':
+        return a.accountStatus.localeCompare(b.accountStatus) * dir;
+      case 'city':
+        return (a.routeCity ?? '').localeCompare(b.routeCity ?? '') * dir;
+      case 'lastVisitDate': {
+        const at = a.lastVisitDate ? new Date(a.lastVisitDate).getTime() : 0;
+        const bt = b.lastVisitDate ? new Date(b.lastVisitDate).getTime() : 0;
+        return (at - bt) * dir;
+      }
+    }
+  });
 };
