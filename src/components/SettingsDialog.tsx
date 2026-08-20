@@ -123,16 +123,16 @@ function MembersTab() {
     <div className="space-y-4">
       <h3 className="text-base font-semibold">Members</h3>
 
-      <div className="flex items-center gap-2">
+      <div className="flex items-center gap-2 flex-wrap">
         <Input
           placeholder="teammate@professionalyardservices.com"
           value={inviteEmail}
           onChange={(e) => setInviteEmail(e.target.value)}
           onKeyDown={(e) => e.key === 'Enter' && handleInvite()}
-          className="flex-1"
+          className="flex-1 min-w-[200px]"
         />
         <Select value={inviteRole} onValueChange={(v) => setInviteRole(v as 'admin' | 'rep')}>
-          <SelectTrigger className="w-24">
+          <SelectTrigger className="w-24 shrink-0">
             <SelectValue />
           </SelectTrigger>
           <SelectContent>
@@ -140,43 +140,44 @@ function MembersTab() {
             <SelectItem value="admin">Admin</SelectItem>
           </SelectContent>
         </Select>
-        <Button onClick={handleInvite} disabled={!inviteEmail.trim() || inviteMember.isPending}>
+        <Button className="shrink-0" onClick={handleInvite} disabled={!inviteEmail.trim() || inviteMember.isPending}>
           {inviteMember.isPending ? 'Inviting…' : 'Invite'}
         </Button>
       </div>
 
-      <div className="rounded-lg border overflow-hidden">
-        <table className="w-full text-sm">
-          <thead className="bg-muted/50 text-xs uppercase text-muted-foreground">
-            <tr>
-              <th className="text-left font-semibold px-3 py-2">Member</th>
-              <th className="text-left font-semibold px-3 py-2">Role</th>
-              <th className="text-left font-semibold px-3 py-2">Status</th>
-            </tr>
-          </thead>
-          <tbody>
-            {isLoading ? (
-              <tr><td colSpan={3} className="px-3 py-4 text-center text-muted-foreground">Loading…</td></tr>
-            ) : members.length === 0 ? (
-              <tr><td colSpan={3} className="px-3 py-4 text-center text-muted-foreground">No members yet.</td></tr>
-            ) : (
-              members.map((m) => (
-                <tr key={m.user_id} className="border-t">
-                  <td className="px-3 py-2">
-                    <p className="font-medium">{m.display_name || m.email}</p>
-                    <p className="text-xs text-muted-foreground">{m.email}</p>
-                  </td>
-                  <td className="px-3 py-2 capitalize">{m.role}</td>
-                  <td className="px-3 py-2">
-                    <Badge variant={m.status === 'active' ? 'default' : 'secondary'} className="capitalize">
-                      {m.status}
-                    </Badge>
-                  </td>
-                </tr>
-              ))
-            )}
-          </tbody>
-        </table>
+      {/* Stacked rows rather than a fixed-column table — ProYard's real
+          emails (e.g. accountmanager@professionalyardservices.com) are
+          long enough that any column-width table risks either clipping
+          the Role/Status cells or illegibly truncating the email. Wrapping
+          the email on its own full-width line sidesteps that entirely,
+          at any dialog width. */}
+      <div className="rounded-lg border divide-y">
+        {isLoading ? (
+          <p className="px-3 py-4 text-center text-sm text-muted-foreground">Loading…</p>
+        ) : members.length === 0 ? (
+          <p className="px-3 py-4 text-center text-sm text-muted-foreground">No members yet.</p>
+        ) : (
+          members.map((m) => (
+            <div key={m.user_id} className="px-3 py-2.5 flex items-center justify-between gap-3">
+              <div className="flex-1 min-w-0">
+                {m.display_name ? (
+                  <>
+                    <p className="font-medium text-sm">{m.display_name}</p>
+                    <p className="text-xs text-muted-foreground break-words">{m.email}</p>
+                  </>
+                ) : (
+                  <p className="font-medium text-sm break-words">{m.email}</p>
+                )}
+              </div>
+              <div className="flex items-center gap-2 shrink-0">
+                <span className="text-xs text-muted-foreground capitalize">{m.role}</span>
+                <Badge variant={m.status === 'active' ? 'default' : 'secondary'} className="capitalize">
+                  {m.status}
+                </Badge>
+              </div>
+            </div>
+          ))
+        )}
       </div>
     </div>
   );
@@ -187,7 +188,7 @@ export default function SettingsDialog({ open, onOpenChange }: { open: boolean; 
 
   return (
     <Dialog open={open} onOpenChange={onOpenChange}>
-      <DialogContent className="sm:max-w-[640px] p-0 overflow-hidden">
+      <DialogContent className="sm:max-w-[720px] p-0 overflow-hidden">
         <div className="flex min-h-[420px]">
           <div className="w-40 bg-muted/30 border-r p-3 space-y-0.5">
             <p className="text-[10px] font-bold uppercase tracking-wider text-muted-foreground px-2 pb-2">Settings</p>
@@ -203,7 +204,7 @@ export default function SettingsDialog({ open, onOpenChange }: { open: boolean; 
               </button>
             ))}
           </div>
-          <div className="flex-1 p-6 overflow-y-auto">
+          <div className="flex-1 min-w-0 p-6 overflow-y-auto">
             {tab === 'profile' && <ProfileTab />}
             {tab === 'members' && <MembersTab />}
           </div>
