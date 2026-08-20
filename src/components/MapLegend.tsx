@@ -19,9 +19,9 @@ export default function MapLegend() {
             </button>
           </PopoverTrigger>
         </TooltipTrigger>
-        <TooltipContent side="bottom" sideOffset={4}>Legend</TooltipContent>
+        <TooltipContent side="left" sideOffset={4}>Legend</TooltipContent>
       </Tooltip>
-      <PopoverContent align="end" className="w-48 p-2">
+      <PopoverContent side="left" align="start" sideOffset={8} className="w-48 p-2">
         <div className="text-xs font-medium px-1 pb-1.5">Key</div>
         <ul className="space-y-1">
           {statusEntries.map(([status, config]) => (

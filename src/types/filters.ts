@@ -1,4 +1,4 @@
-import { AccountStatus, ServiceType } from './account';
+import { AccountStatus, ServiceFilterOption } from './account';
 
 export type FilterField =
   | 'status'
@@ -35,7 +35,7 @@ export type FilterValue =
   | { kind: 'none' }
   | { kind: 'strings'; values: string[] }
   | { kind: 'statuses'; values: AccountStatus[] }
-  | { kind: 'services'; values: ServiceType[] }
+  | { kind: 'services'; values: ServiceFilterOption[] }
   | { kind: 'text'; value: string }
   | { kind: 'number'; value: number | null }
   | { kind: 'numberRange'; min: number | null; max: number | null }

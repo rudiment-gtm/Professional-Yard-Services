@@ -11,7 +11,14 @@ import {
   FilterValue,
   FIELD_META,
 } from '@/types/filters';
-import { AccountStatus, ServiceType, statusConfig, serviceConfig, ALL_SERVICE_TYPES } from '@/types/account';
+import {
+  AccountStatus,
+  ServiceFilterOption,
+  statusConfig,
+  serviceConfig,
+  ALL_SERVICE_FILTER_OPTIONS,
+  FULL_SERVICE_CONFIG,
+} from '@/types/account';
 import { cn } from '@/lib/utils';
 
 interface Props {
@@ -22,7 +29,9 @@ interface Props {
 }
 
 const STATUS_OPTIONS: AccountStatus[] = Object.keys(statusConfig) as AccountStatus[];
-const SERVICE_OPTIONS: ServiceType[] = ALL_SERVICE_TYPES;
+const SERVICE_OPTIONS: ServiceFilterOption[] = ALL_SERVICE_FILTER_OPTIONS;
+const serviceOptionLabel = (v: ServiceFilterOption) =>
+  v === 'fullService' ? FULL_SERVICE_CONFIG.label : serviceConfig[v].label;
 
 function MultiSelect<T extends string>({
   options,
@@ -135,7 +144,7 @@ export default function ValueInput({ field, operator, value, onChange }: Props) 
         options={SERVICE_OPTIONS}
         selected={value.values}
         onChange={(v) => onChange({ kind: 'services', values: v })}
-        labelFor={(v) => serviceConfig[v].label}
+        labelFor={serviceOptionLabel}
       />
     );
   }

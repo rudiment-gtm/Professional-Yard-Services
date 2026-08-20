@@ -140,6 +140,10 @@ export const serviceConfig: Record<ServiceType, { label: string; color: string }
 
 export const FULL_SERVICE_CONFIG = { label: 'Full Service', color: '#1976D2' };
 
+// Synthetic filter option — not a stored ServiceType, matched via isFullService().
+export type ServiceFilterOption = ServiceType | 'fullService';
+export const ALL_SERVICE_FILTER_OPTIONS: ServiceFilterOption[] = [...ALL_SERVICE_TYPES, 'fullService'];
+
 // Prospect categories for "Around Me" — property/business types worth
 // prospecting for yard service (replaces Smart Route's B2B "Industry" concept).
 export type ProspectCategory =

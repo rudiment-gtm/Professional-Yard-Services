@@ -27,3 +27,8 @@ verify_jwt = false
 # session; authenticated via the X-N8N-Secret header instead.
 [functions.n8n-update-quote-doc]
 verify_jwt = false
+
+# Called only by the accounts_canceled_notify trigger (internal,
+# service-to-service) — no end-user session to verify a JWT against.
+[functions.notify-n8n-status-canceled]
+verify_jwt = false

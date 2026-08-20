@@ -12,13 +12,17 @@ import {
 } from 'lucide-react';
 import AroundMeDialog from '@/components/AroundMeDialog';
 import RouteOverviewDialog from '@/components/RouteOverviewDialog';
-import LoadSharedRouteDialog from '@/components/LoadSharedRouteDialog';
 import SavedRoutesDialog from '@/components/SavedRoutesDialog';
 import { useAppStore, useFilteredAccounts } from '@/store/appStore';
 import { Button } from '@/components/ui/button';
 import { Tooltip, TooltipContent, TooltipTrigger } from '@/components/ui/tooltip';
 import { cn } from '@/lib/utils';
 import AdvancedFilterPanel from '@/components/filters/AdvancedFilterPanel';
+
+// Display-only — no real usage tracking wired up yet. Swap for a real query
+// if/when Prospeo/Clay usage is actually metered per-team.
+const CREDITS_USED = 4180;
+const CREDITS_TOTAL = 5000;
 
 const openAddAccountManual = () => {
   window.dispatchEvent(new CustomEvent('openAddAccountManual'));
@@ -44,6 +48,7 @@ export default function FilterSidebar() {
 
   const hasAroundMeResults = aroundMeResults.length > 0;
   const filteredAccounts = useFilteredAccounts();
+  const creditsPct = Math.round((CREDITS_USED / CREDITS_TOTAL) * 100);
 
   // Generate Google Maps URL with waypoints - always starting from user's current location
   const openGoogleMapsNavigation = () => {
@@ -108,7 +113,7 @@ export default function FilterSidebar() {
             {isSidebarOpen ? (
               <>
                 <div>
-                  <h1 className="text-lg font-bold text-sidebar-primary-foreground">ProYard Sales Map</h1>
+                  <h1 className="text-lg font-bold text-sidebar-foreground">ProYard Sales Map</h1>
                   <p className="text-xs text-sidebar-muted">Sales Territory Mapper</p>
                 </div>
                 <button
@@ -219,110 +224,75 @@ export default function FilterSidebar() {
           </div>
           )}
 
-          {/* Route Mode Panel */}
-          {activeTab === 'map' && isSidebarOpen && (
+          {/* Route Mode Panel — Around Me / Route Mode / Saved Routes triggers
+              and Load Shared Route live only in the map's right-side control
+              rail now (AccountMap.tsx), matching Encore. This only renders
+              once route mode actually has something to show. */}
+          {activeTab === 'map' && isSidebarOpen && isRouteModeActive && (
             <div className="p-4 border-t border-sidebar-border space-y-3">
-              <div className="flex items-center justify-between gap-2">
-                <Tooltip>
-                  <TooltipTrigger asChild>
+              <div className="bg-sidebar-accent rounded-lg p-3 space-y-2">
+                <div className="flex items-center justify-between">
+                  <span className="text-sm text-sidebar-foreground">
+                    {routeStops.length} stop{routeStops.length !== 1 ? 's' : ''} selected
+                  </span>
+                  {routeStops.length > 0 && (
                     <button
-                      onClick={openAddAccountManual}
-                      aria-label="Add Account"
-                      className="touch-button flex-1 h-11 rounded-lg bg-primary text-white hover:bg-primary/90 transition-all inline-flex items-center justify-center"
+                      onClick={clearRouteSelection}
+                      className="text-sidebar-muted hover:text-sidebar-foreground transition-colors"
                     >
-                      <Plus className="w-5 h-5" />
+                      <X className="w-4 h-4" />
                     </button>
-                  </TooltipTrigger>
-                  <TooltipContent>Add Account</TooltipContent>
-                </Tooltip>
-
-                <Tooltip>
-                  <TooltipTrigger asChild>
-                    <button
-                      onClick={() =>
-                        hasAroundMeResults
-                          ? setAroundMeOpen(true)
-                          : openAroundMeWithOrigin(null)
-                      }
-                      aria-label={hasAroundMeResults ? 'Edit Around Me Results' : 'Around Me'}
-                      className="touch-button flex-1 h-11 rounded-lg bg-status-active text-white hover:bg-status-active/90 transition-all inline-flex items-center justify-center"
-                    >
-                      {hasAroundMeResults ? <Pencil className="w-5 h-5" /> : <Binoculars className="w-5 h-5" />}
-                    </button>
-                  </TooltipTrigger>
-                  <TooltipContent>{hasAroundMeResults ? 'Edit Results' : 'Around Me'}</TooltipContent>
-                </Tooltip>
-
-                <Tooltip>
-                  <TooltipTrigger asChild>
-                    <button
-                      onClick={toggleRouteMode}
-                      aria-label={isRouteModeActive ? 'Exit Route Mode' : 'Plan Route'}
-                      className={cn(
-                        'touch-button flex-1 h-11 rounded-lg transition-all inline-flex items-center justify-center',
-                        isRouteModeActive
-                          ? 'bg-destructive text-destructive-foreground hover:bg-destructive/90 ring-2 ring-destructive/60'
-                          : 'bg-primary/20 text-primary hover:bg-primary/30',
-                      )}
-                    >
-                      {isRouteModeActive ? <X className="w-5 h-5" /> : <Route className="w-5 h-5" />}
-                    </button>
-                  </TooltipTrigger>
-                  <TooltipContent>{isRouteModeActive ? 'Exit Route Mode' : 'Plan Route'}</TooltipContent>
-                </Tooltip>
-
-                <Tooltip>
-                  <TooltipTrigger asChild>
-                    <div className="flex-1">
-                      <SavedRoutesDialog triggerClassName="w-full h-11" />
-                    </div>
-                  </TooltipTrigger>
-                  <TooltipContent>My Routes</TooltipContent>
-                </Tooltip>
-              </div>
-
-              <LoadSharedRouteDialog />
-
-              {isRouteModeActive && (
-                <div className="bg-sidebar-accent rounded-lg p-3 space-y-2">
-                  <div className="flex items-center justify-between">
-                    <span className="text-sm text-sidebar-foreground">
-                      {routeStops.length} stop{routeStops.length !== 1 ? 's' : ''} selected
-                    </span>
-                    {routeStops.length > 0 && (
-                      <button
-                        onClick={clearRouteSelection}
-                        className="text-sidebar-muted hover:text-sidebar-foreground transition-colors"
-                      >
-                        <X className="w-4 h-4" />
-                      </button>
-                    )}
-                  </div>
-
-                  {userLocation && (
-                    <p className="text-xs text-status-active flex items-center gap-1">
-                      <span className="w-2 h-2 bg-status-active rounded-full" />
-                      Starting from your location
-                    </p>
                   )}
-
-                  {routeStops.length >= 1 && (
-                    <div className="space-y-2">
-                      <RouteOverviewDialog />
-                      <Button
-                        className="w-full gap-2 bg-status-active hover:bg-status-active/90"
-                        size="sm"
-                        onClick={openGoogleMapsNavigation}
-                      >
-                        <Navigation className="w-4 h-4" />
-                        Start Navigation
-                      </Button>
-                    </div>
-                  )}
-
-                  <p className="text-xs text-sidebar-muted">Click pins on the map to add stops</p>
                 </div>
-              )}
+
+                {userLocation && (
+                  <p className="text-xs text-status-active flex items-center gap-1">
+                    <span className="w-2 h-2 bg-status-active rounded-full" />
+                    Starting from your location
+                  </p>
+                )}
+
+                {routeStops.length >= 1 && (
+                  <div className="space-y-2">
+                    <RouteOverviewDialog />
+                    <Button
+                      className="w-full gap-2 bg-status-active hover:bg-status-active/90"
+                      size="sm"
+                      onClick={openGoogleMapsNavigation}
+                    >
+                      <Navigation className="w-4 h-4" />
+                      Start Navigation
+                    </Button>
+                  </div>
+                )}
+
+                <p className="text-xs text-sidebar-muted">Click pins on the map to add stops</p>
+              </div>
+            </div>
+          )}
+
+          {/* Sidebar footer — enrichment credits (cosmetic display only,
+              no plan-tier/billing system behind it). */}
+          {isSidebarOpen && (
+            <div className="mt-auto p-4 border-t border-sidebar-border">
+              <div className="glass-card p-3.5 space-y-2">
+                <div className="flex items-center justify-between gap-2">
+                  <span className="text-[10px] font-bold uppercase tracking-[0.1em] text-primary/90">
+                    Enrichment credits
+                  </span>
+                  <span className="text-sm font-bold tabular-nums text-sidebar-foreground">
+                    {CREDITS_USED.toLocaleString()}
+                    <span className="text-sidebar-muted font-normal"> / {CREDITS_TOTAL.toLocaleString()}</span>
+                  </span>
+                </div>
+                <div className="h-[5px] rounded-full bg-white/5 overflow-hidden">
+                  <div
+                    className="h-full rounded-full bg-gradient-to-r from-[#00c99a] to-primary shadow-[0_0_12px_hsl(var(--primary)/0.55)]"
+                    style={{ width: `${creditsPct}%` }}
+                  />
+                </div>
+                <p className="text-[11px] text-sidebar-muted">Prospeo + Clay · Standard plan</p>
+              </div>
             </div>
           )}
         </div>

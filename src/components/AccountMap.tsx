@@ -12,10 +12,12 @@ import {
 import { Button } from '@/components/ui/button';
 import { Tooltip, TooltipContent, TooltipTrigger } from '@/components/ui/tooltip';
 
-import { Map, Satellite, List, Plus } from 'lucide-react';
+import { Map, Satellite, List, Plus, Binoculars, Pencil, Route, X } from 'lucide-react';
 import AddAccountDialog from './AddAccountDialog';
 import MapListView from './MapListView';
 import MapLegend from './MapLegend';
+import SavedRoutesDialog from './SavedRoutesDialog';
+import { cn } from '@/lib/utils';
 import type { AroundMeResult } from '@/lib/aroundMeSearch';
 import { useQueryClient } from '@tanstack/react-query';
 import { useCreateAccountFromAroundMe } from '@/hooks/useAccounts';
@@ -73,7 +75,12 @@ export default function AccountMap() {
     aroundMeOrigin,
     selectedAccount,
     mapCenter: storeMapCenter,
+    openAroundMeWithOrigin,
+    setAroundMeOpen,
+    toggleRouteMode,
   } = useAppStore();
+
+  const hasAroundMeResults = aroundMeResults.length > 0;
 
   const createAccountFromAroundMe = useCreateAccountFromAroundMe();
   
@@ -1123,8 +1130,9 @@ export default function AccountMap() {
         </div>
       )}
       
-      {/* Map controls — horizontal icon bar */}
-      <div className="absolute top-4 right-4 z-10 flex items-center gap-2">
+      {/* Map controls — vertical rail on desktop, compact floating cluster
+          on mobile, so it never sits on top of pins/labels. */}
+      <div className="fixed z-20 flex items-center gap-2 rounded-lg border p-1.5 top-4 right-4 bg-background/90 backdrop-blur-md border-border md:top-14 md:bottom-0 md:right-0 md:rounded-none md:border-l md:border-t-0 md:p-4 md:flex-col md:gap-3 md:w-14">
         <Tooltip>
           <TooltipTrigger asChild>
             <button
@@ -1135,7 +1143,7 @@ export default function AccountMap() {
               {mapStyle === 'streets' ? <Satellite className="h-4 w-4" /> : <Map className="h-4 w-4" />}
             </button>
           </TooltipTrigger>
-          <TooltipContent side="bottom" sideOffset={4}>{mapStyle === 'streets' ? 'Satellite view' : 'Street view'}</TooltipContent>
+          <TooltipContent side="left" sideOffset={4}>{mapStyle === 'streets' ? 'Satellite view' : 'Street view'}</TooltipContent>
         </Tooltip>
 
         <Tooltip>
@@ -1160,7 +1168,7 @@ export default function AccountMap() {
               <List className="h-4 w-4" />
             </button>
           </TooltipTrigger>
-          <TooltipContent side="bottom" sideOffset={4}>List view</TooltipContent>
+          <TooltipContent side="left" sideOffset={4}>List view</TooltipContent>
         </Tooltip>
 
         <Tooltip>
@@ -1176,10 +1184,54 @@ export default function AccountMap() {
               <Plus className="h-4 w-4" />
             </button>
           </TooltipTrigger>
-          <TooltipContent side="bottom" sideOffset={4}>Add Account</TooltipContent>
+          <TooltipContent side="left" sideOffset={4}>Add Account</TooltipContent>
         </Tooltip>
 
         <MapLegend />
+
+        <Tooltip>
+          <TooltipTrigger asChild>
+            <button
+              onClick={() =>
+                hasAroundMeResults
+                  ? setAroundMeOpen(true)
+                  : openAroundMeWithOrigin(null)
+              }
+              aria-label={hasAroundMeResults ? 'Edit Around Me Results' : 'Around Me'}
+              className="h-9 w-9 rounded-md bg-background/90 backdrop-blur-sm shadow-lg border inline-flex items-center justify-center hover:bg-background transition"
+            >
+              {hasAroundMeResults ? <Pencil className="h-4 w-4" /> : <Binoculars className="h-4 w-4" />}
+            </button>
+          </TooltipTrigger>
+          <TooltipContent side="left" sideOffset={4}>{hasAroundMeResults ? 'Edit Results' : 'Around Me'}</TooltipContent>
+        </Tooltip>
+
+        <Tooltip>
+          <TooltipTrigger asChild>
+            <button
+              onClick={toggleRouteMode}
+              aria-label={isRouteModeActive ? 'Exit Route Mode' : 'Plan Route'}
+              className={cn(
+                'h-9 w-9 rounded-md shadow-lg inline-flex items-center justify-center transition',
+                isRouteModeActive
+                  ? 'bg-destructive text-destructive-foreground hover:bg-destructive/90'
+                  : 'bg-background/90 backdrop-blur-sm border hover:bg-background',
+              )}
+            >
+              {isRouteModeActive ? <X className="h-4 w-4" /> : <Route className="h-4 w-4" />}
+            </button>
+          </TooltipTrigger>
+          <TooltipContent side="left" sideOffset={4}>{isRouteModeActive ? 'Exit Route Mode' : 'Plan Route'}</TooltipContent>
+        </Tooltip>
+
+        <Tooltip>
+          <TooltipTrigger asChild>
+            <div>
+              <SavedRoutesDialog triggerClassName="h-9 w-9 rounded-md bg-background/90 backdrop-blur-sm shadow-lg border hover:bg-background" />
+            </div>
+          </TooltipTrigger>
+          <TooltipContent side="left" sideOffset={4}>My Routes</TooltipContent>
+        </Tooltip>
       </div>
 
 

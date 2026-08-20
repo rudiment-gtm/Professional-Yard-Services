@@ -466,7 +466,7 @@ export default function AccountDrawer() {
               <div className="flex-1 min-w-0">
                 <div className="flex items-center gap-2 flex-wrap">
                   {selectedAccount.id.startsWith('preview:') ? (
-                    <h2 className="text-lg font-bold text-foreground truncate">
+                    <h2 className="text-xl font-extrabold tracking-[-0.02em] text-foreground truncate">
                       {selectedAccount.accountName}
                     </h2>
                   ) : (
@@ -481,7 +481,7 @@ export default function AccountDrawer() {
                           })
                         );
                       }}
-                      className="text-lg font-bold text-foreground truncate text-left hover:underline hover:text-primary focus:outline-none focus:underline"
+                      className="text-xl font-extrabold tracking-[-0.02em] text-foreground truncate text-left hover:underline hover:text-primary focus:outline-none focus:underline"
                       title="Show on map"
                     >
                       {selectedAccount.accountName}
@@ -538,9 +538,9 @@ export default function AccountDrawer() {
                 <h3 className="text-sm font-semibold text-muted-foreground uppercase tracking-wider">
                    Main Contact
                 </h3>
-                <div className="bg-muted/50 rounded-xl p-4 space-y-3">
+                <div className="glass-card p-4 space-y-3">
                   <div className="flex items-center gap-3">
-                    <div className="w-12 h-12 bg-primary/10 rounded-full flex items-center justify-center">
+                    <div className="icon-chip-lg">
                       <User className="w-6 h-6 text-primary" />
                     </div>
                     <div>
@@ -557,13 +557,13 @@ export default function AccountDrawer() {
                         href={`tel:${selectedAccount.mainPhone}`}
                         className="flex items-center gap-3 p-2 rounded-lg hover:bg-muted transition-colors group"
                       >
-                        <Phone className="w-4 h-4 text-muted-foreground group-hover:text-primary" />
+                        <span className="icon-chip"><Phone className="w-4 h-4 text-primary" /></span>
                         <span className="text-sm">{selectedAccount.mainPhone}</span>
                         <ChevronRight className="w-4 h-4 ml-auto text-muted-foreground" />
                       </a>
                     ) : (
                       <div className="flex items-center gap-3 p-2 rounded-lg">
-                        <Phone className="w-4 h-4 text-muted-foreground" />
+                        <span className="icon-chip"><Phone className="w-4 h-4 text-muted-foreground" /></span>
                         <span className="text-sm text-muted-foreground">—</span>
                       </div>
                     )}
@@ -572,13 +572,13 @@ export default function AccountDrawer() {
                         href={`mailto:${selectedAccount.mainEmail}`}
                         className="flex items-center gap-3 p-2 rounded-lg hover:bg-muted transition-colors group"
                       >
-                        <Mail className="w-4 h-4 text-muted-foreground group-hover:text-primary" />
+                        <span className="icon-chip"><Mail className="w-4 h-4 text-primary" /></span>
                         <span className="text-sm truncate">{selectedAccount.mainEmail}</span>
                         <ChevronRight className="w-4 h-4 ml-auto text-muted-foreground flex-shrink-0" />
                       </a>
                     ) : (
                       <div className="flex items-center gap-3 p-2 rounded-lg">
-                        <Mail className="w-4 h-4 text-muted-foreground" />
+                        <span className="icon-chip"><Mail className="w-4 h-4 text-muted-foreground" /></span>
                         <span className="text-sm text-muted-foreground">—</span>
                       </div>
                     )}
@@ -589,24 +589,24 @@ export default function AccountDrawer() {
                         rel="noopener noreferrer"
                         className="flex items-center gap-3 p-2 rounded-lg hover:bg-muted transition-colors group"
                       >
-                        <Globe className="w-4 h-4 text-muted-foreground group-hover:text-primary" />
+                        <span className="icon-chip"><Globe className="w-4 h-4 text-primary" /></span>
                         <span className="text-sm truncate">{selectedAccount.website.replace(/^https?:\/\//i, '')}</span>
                         <ExternalLink className="w-4 h-4 ml-auto text-muted-foreground flex-shrink-0" />
                       </a>
                     ) : (
                       <div className="flex items-center gap-3 p-2 rounded-lg">
-                        <Globe className="w-4 h-4 text-muted-foreground" />
+                        <span className="icon-chip"><Globe className="w-4 h-4 text-muted-foreground" /></span>
                         <span className="text-sm text-muted-foreground">—</span>
                       </div>
                     )}
                     {selectedAccount.linkedinUrl && (
-                      <a 
+                      <a
                         href={selectedAccount.linkedinUrl}
                         target="_blank"
                         rel="noopener noreferrer"
                         className="flex items-center gap-3 p-2 rounded-lg hover:bg-muted transition-colors group"
                       >
-                        <Linkedin className="w-4 h-4 text-muted-foreground group-hover:text-primary" />
+                        <span className="icon-chip"><Linkedin className="w-4 h-4 text-primary" /></span>
                         <span className="text-sm">LinkedIn Profile</span>
                         <ExternalLink className="w-4 h-4 ml-auto text-muted-foreground" />
                       </a>
@@ -624,7 +624,7 @@ export default function AccountDrawer() {
                   {savedContacts.map((contact) => {
                     const revealing = revealingField[contact.id];
                     return (
-                      <div key={contact.id} className="bg-muted/50 rounded-xl p-3 space-y-1.5">
+                      <div key={contact.id} className="glass-card p-3 space-y-1.5">
                         <div className="flex items-center justify-between">
                           <div>
                             <p className="text-sm font-medium">{contact.first_name} {contact.last_name}</p>
@@ -693,7 +693,7 @@ export default function AccountDrawer() {
                   </h3>
                   <div className="space-y-2">
                     {secondaryContacts.map((contact) => (
-                      <div key={contact.id} className="bg-muted/50 rounded-xl p-3 space-y-2">
+                      <div key={contact.id} className="glass-card p-3 space-y-2">
                         <div className="flex items-center gap-3">
                           <div className="w-8 h-8 bg-primary/10 rounded-full flex items-center justify-center">
                             <User className="w-4 h-4 text-primary" />
@@ -758,7 +758,7 @@ export default function AccountDrawer() {
                       href={`https://maps.google.com/?q=${encodeURIComponent(formattedAddress)}`}
                       target="_blank"
                       rel="noopener noreferrer"
-                      className="flex items-start gap-3 p-3 bg-muted/50 rounded-xl hover:bg-muted transition-colors group"
+                      className="flex items-start gap-3 p-3 glass-card hover:bg-muted transition-colors group"
                     >
                       <MapPin className="w-5 h-5 text-muted-foreground group-hover:text-primary flex-shrink-0 mt-0.5" />
                       <div className="flex-1">
@@ -793,14 +793,14 @@ export default function AccountDrawer() {
                   Activity
                 </h3>
                 <div className="grid grid-cols-2 gap-3">
-                  <div className="bg-muted/50 rounded-xl p-3">
+                  <div className="glass-card p-3">
                     <div className="flex items-center gap-2 text-muted-foreground mb-1">
                       <Calendar className="w-4 h-4" />
                       <span className="text-xs">Last Visit</span>
                     </div>
                     <p className="font-semibold">{formatDate(selectedAccount.lastVisitDate)}</p>
                   </div>
-                  <div className="bg-muted/50 rounded-xl p-3">
+                  <div className="glass-card p-3">
                     <div className="flex items-center gap-2 text-muted-foreground mb-1">
                       <ClipboardCheck className="w-4 h-4" />
                       <span className="text-xs">Total Visits</span>
@@ -808,7 +808,7 @@ export default function AccountDrawer() {
                     <p className="font-semibold">{selectedAccount.visitCount}</p>
                   </div>
                   {selectedAccount.nextFollowUpDate && (
-                    <div className="bg-muted/50 rounded-xl p-3 col-span-2">
+                    <div className="glass-card p-3 col-span-2">
                       <div className="flex items-center gap-2 text-muted-foreground mb-1">
                         <Calendar className="w-4 h-4" />
                         <span className="text-xs">Next Follow-up</span>
@@ -1213,7 +1213,7 @@ export default function AccountDrawer() {
                 ) : (
                   <div className="space-y-2">
                     {accountNotes.map((note) => (
-                      <div key={note.id} className="bg-muted/50 rounded-xl p-3 space-y-1">
+                      <div key={note.id} className="glass-card p-3 space-y-1">
                         <div className="flex items-center justify-between">
                           <span className="text-xs font-medium text-foreground">{note.author_name}</span>
                           <div className="flex items-center gap-1">
@@ -1289,7 +1289,7 @@ export default function AccountDrawer() {
                   <h3 className="text-sm font-semibold text-muted-foreground uppercase tracking-wider">
                     Legacy Notes
                   </h3>
-                  <div className="bg-muted/50 rounded-xl p-3">
+                  <div className="glass-card p-3">
                     <p className="text-sm whitespace-pre-wrap">{selectedAccount.accountNotes}</p>
                   </div>
                 </div>

@@ -4,7 +4,7 @@ const corsHeaders = {
 };
 
 // TODO: set to ProYard's actual rep email domain(s) once known
-const ALLOWED_DOMAINS = ['proyardservices.com', 'getrudiment.com'];
+const ALLOWED_DOMAINS = ['professionalyardservices.com', 'getrudiment.com'];
 
 function isAllowedEmail(email: string): boolean {
   const domain = email.split('@')[1]?.toLowerCase();

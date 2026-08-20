@@ -4,6 +4,7 @@ import { useAppStore } from '@/store/appStore';
 import { cn } from '@/lib/utils';
 import { ClaySyncDialog } from '@/components/ClaySyncDialog';
 import { UserMenu } from '@/components/UserMenu';
+import ImportCsvButton from '@/components/ImportCsvButton';
 import { Account } from '@/types/account';
 import { MAPBOX_ACCESS_TOKEN } from '@/config/mapbox';
 import { toast } from 'sonner';
@@ -186,9 +187,11 @@ export default function MapHeader() {
           </div>
         )}
         
-        
+
+        <ImportCsvButton />
+
         <ClaySyncDialog />
-        
+
         <UserMenu />
       </div>
     </header>

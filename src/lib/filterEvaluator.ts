@@ -1,4 +1,4 @@
-import { Account } from '@/types/account';
+import { Account, ServiceType, isFullService } from '@/types/account';
 import { FilterCondition, FilterGroup } from '@/types/filters';
 
 const normStr = (s: string | undefined | null) => (s ?? '').trim().toLowerCase();
@@ -38,8 +38,10 @@ function evaluateCondition(account: Account, cond: FilterCondition): boolean {
     case 'services': {
       const arr = value.values as string[];
       if (arr.length === 0) return true;
-      const accountServices = Array.isArray(v) ? (v as string[]) : [];
-      const match = arr.some((s) => accountServices.includes(s));
+      const accountServices = (Array.isArray(v) ? (v as string[]) : []) as ServiceType[];
+      const match = arr.some((s) =>
+        s === 'fullService' ? isFullService(accountServices) : accountServices.includes(s as ServiceType)
+      );
       return operator === 'not_in' ? !match : match;
     }
     case 'strings': {

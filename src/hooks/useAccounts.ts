@@ -275,6 +275,38 @@ export function useCreateAccountFromAroundMe() {
   });
 }
 
+export interface ImportedAccountRow {
+  account_name: string;
+  route_address: string | null;
+  route_city: string | null;
+  route_state: string | null;
+  route_zip: string | null;
+  latitude: number | null;
+  longitude: number | null;
+  website: string | null;
+  main_phone: string | null;
+  main_email: string | null;
+}
+
+// Bulk-inserts CSV-imported companies straight into `accounts` as new leads
+// — ProYard has no separate staging table, so an import is just a batch of
+// new accounts with account_status 'lead', same as any other new lead.
+export function useImportAccountsFromCsv() {
+  const queryClient = useQueryClient();
+  return useMutation({
+    mutationFn: async (rows: ImportedAccountRow[]) => {
+      const { data, error } = await (supabase.from('accounts') as any)
+        .insert(rows.map((r) => ({ ...r, account_status: 'lead', visit_count: 0 })))
+        .select('id, account_name');
+      if (error) throw error;
+      return data as { id: string; account_name: string }[];
+    },
+    onSuccess: () => {
+      queryClient.invalidateQueries({ queryKey: ['accounts'] });
+    },
+  });
+}
+
 // Normalize an address string for fuzzy dedup matching.
 // Lowercase, strip punctuation, collapse whitespace, expand common abbreviations.
 export function normalizeAddress(s: string | null | undefined): string {

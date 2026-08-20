@@ -10,7 +10,7 @@ import { Alert, AlertDescription } from '@/components/ui/alert';
 import { Tabs, TabsContent, TabsList, TabsTrigger } from '@/components/ui/tabs';
 import { Loader2 } from 'lucide-react';
 
-const ALLOWED_DOMAINS = ['proyardservices.com', 'getrudiment.com'];
+const ALLOWED_DOMAINS = ['professionalyardservices.com', 'getrudiment.com'];
 
 const isAllowedEmail = (email: string): boolean => {
   const domain = email.split('@')[1]?.toLowerCase();
@@ -113,8 +113,23 @@ export default function Auth() {
   };
 
   return (
-    <div className="min-h-screen flex items-center justify-center bg-background p-4">
-      <Card className="w-full max-w-md">
+    <div className="relative min-h-screen flex items-center justify-center p-4 overflow-hidden">
+      <div className="ambient-bg" aria-hidden="true">
+        <svg viewBox="0 0 800 800" xmlns="http://www.w3.org/2000/svg">
+          <defs>
+            <linearGradient id="authAmbientGradient" x1="0%" y1="0%" x2="100%" y2="100%">
+              <stop offset="0%" stopColor="hsl(165 100% 47%)" stopOpacity="0" />
+              <stop offset="50%" stopColor="hsl(165 100% 47%)" stopOpacity="0.5" />
+              <stop offset="100%" stopColor="hsl(165 100% 47%)" stopOpacity="0" />
+            </linearGradient>
+          </defs>
+          <path className="ambient-wavy-path" d="M -50,180 C 150,120 250,260 450,180 S 750,120 900,220" fill="none" stroke="url(#authAmbientGradient)" strokeWidth="1.5" />
+          <path className="ambient-wavy-path" d="M -50,340 C 180,280 280,420 480,340 S 780,280 900,380" fill="none" stroke="url(#authAmbientGradient)" strokeWidth="1.5" style={{ animationDelay: '-3s' }} />
+          <path className="ambient-wavy-path" d="M -50,500 C 150,440 260,580 460,500 S 760,440 900,540" fill="none" stroke="url(#authAmbientGradient)" strokeWidth="1.5" style={{ animationDelay: '-6s' }} />
+          <path className="ambient-wavy-path" d="M -50,650 C 170,600 270,720 470,650 S 770,600 900,690" fill="none" stroke="url(#authAmbientGradient)" strokeWidth="1.5" style={{ animationDelay: '-1.5s' }} />
+        </svg>
+      </div>
+      <Card className="relative z-10 w-full max-w-md">
         <CardHeader className="text-center">
           <div className="flex justify-center mb-4">
             <img src="/proyard-logo.svg" alt="Professional Yard Services" className="h-16 w-auto" />
