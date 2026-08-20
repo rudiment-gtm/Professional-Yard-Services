@@ -9,6 +9,7 @@ import AdvancedFilterPanel from '@/components/filters/AdvancedFilterPanel';
 import { FilterCondition, FilterGroup, FIELD_META, OPERATOR_LABELS } from '@/types/filters';
 import { statusConfig, serviceConfig, FULL_SERVICE_CONFIG } from '@/types/account';
 import { useTags, type Tag } from '@/hooks/useTags';
+import { useAccounts } from '@/hooks/useAccounts';
 import { cn } from '@/lib/utils';
 
 function describeCondition(cond: FilterCondition, tagsById: Map<string, Tag>): string {
@@ -73,6 +74,11 @@ export default function MapToolbar() {
   const mapSort = useAppStore((s) => s.mapSort);
   const setMapSort = useAppStore((s) => s.setMapSort);
   const filteredAccounts = useFilteredAccounts();
+  // Same queryKey as Index.tsx's useAccounts() call — React Query dedupes
+  // this to the shared cache entry, so this doesn't trigger a second fetch.
+  // Used only so the toolbar can tell "still loading" apart from "genuinely
+  // zero accounts" instead of showing a misleading "0/0" during the fetch.
+  const { isLoading: accountsLoading } = useAccounts();
   const { filters, removeFilterGroup } = useFilterScope('map');
   const { data: tags = [] } = useTags();
   const tagsById = new Map(tags.map((t) => [t.id, t]));
@@ -102,10 +108,16 @@ export default function MapToolbar() {
       )}
     >
       <span className="text-xs font-medium text-muted-foreground whitespace-nowrap">
-        <span className="font-semibold text-foreground">
-          {filteredAccounts.length}/{accounts.length}
-        </span>{' '}
-        accounts
+        {accountsLoading && accounts.length === 0 ? (
+          <span className="text-foreground">Loading accounts…</span>
+        ) : (
+          <>
+            <span className="font-semibold text-foreground">
+              {filteredAccounts.length}/{accounts.length}
+            </span>{' '}
+            accounts
+          </>
+        )}
       </span>
 
       <div className="h-4 w-px bg-border shrink-0" />
