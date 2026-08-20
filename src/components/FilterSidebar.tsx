@@ -11,10 +11,13 @@ import {
   Map as MapIcon,
   Radar,
   Users,
+  Settings as SettingsIcon,
 } from 'lucide-react';
+import { useState } from 'react';
 import AroundMeDialog from '@/components/AroundMeDialog';
 import RouteOverviewDialog from '@/components/RouteOverviewDialog';
 import SavedRoutesDialog from '@/components/SavedRoutesDialog';
+import SettingsDialog from '@/components/SettingsDialog';
 import { useAppStore } from '@/store/appStore';
 import { Button } from '@/components/ui/button';
 import { cn } from '@/lib/utils';
@@ -52,6 +55,7 @@ export default function FilterSidebar() {
     activeTab,
     setActiveTab,
   } = useAppStore();
+  const [settingsOpen, setSettingsOpen] = useState(false);
 
   const hasAroundMeResults = aroundMeResults.length > 0;
   const creditsPct = Math.round((CREDITS_USED / CREDITS_TOTAL) * 100);
@@ -248,10 +252,17 @@ export default function FilterSidebar() {
             </div>
           )}
 
-          {/* Sidebar footer — enrichment credits (cosmetic display only,
-              no plan-tier/billing system behind it). */}
+          {/* Sidebar footer — settings + enrichment credits (credits display
+              only, no plan-tier/billing system behind it). */}
           {isSidebarOpen && (
-            <div className="mt-auto p-4 border-t border-sidebar-border">
+            <div className="mt-auto p-4 border-t border-sidebar-border space-y-3">
+              <button
+                onClick={() => setSettingsOpen(true)}
+                className="w-full flex items-center gap-2.5 px-1 py-1 rounded-md text-sm text-sidebar-muted hover:text-sidebar-foreground transition-colors"
+              >
+                <SettingsIcon className="w-4 h-4" />
+                Settings
+              </button>
               <div className="glass-card p-3.5 space-y-2">
                 <div className="flex items-center justify-between gap-2">
                   <span className="text-[10px] font-bold uppercase tracking-[0.1em] text-primary/90">
@@ -286,6 +297,7 @@ export default function FilterSidebar() {
       )}
 
       <AroundMeDialog />
+      <SettingsDialog open={settingsOpen} onOpenChange={setSettingsOpen} />
     </>
   );
 }

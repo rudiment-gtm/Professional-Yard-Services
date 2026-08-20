@@ -64,7 +64,7 @@ import { findAccountByAddress, useCreateAccountFromAroundMe, useUpdateAccountSta
 import { useProspectContactsForAccount, useUpsertProspectContact } from '@/hooks/useProspectContacts';
 import type { ProspectContact } from '@/hooks/useProspectContacts';
 import { format } from 'date-fns';
-import { REP_ASSIGNEES } from '@/lib/repAssignees';
+import { useMembers } from '@/hooks/useMembers';
 import { useCustomActivityTypes, useCreateActivityType } from '@/hooks/useTags';
 import EditContactDialog from '@/components/EditContactDialog';
 import AccountTagsEditor from '@/components/AccountTagsEditor';
@@ -104,7 +104,7 @@ export default function AccountDrawer() {
   const [editingNoteId, setEditingNoteId] = useState<string | null>(null);
   const [editingNoteText, setEditingNoteText] = useState('');
   const [eventType, setEventType] = useState<string>('');
-  const [assignedTo, setAssignedTo] = useState<string>(REP_ASSIGNEES[0]);
+  const [assignedTo, setAssignedTo] = useState<string>('');
   const [quoteServices, setQuoteServices] = useState<ServiceType[]>([]);
   const [quotePrices, setQuotePrices] = useState<Record<string, string>>({});
   const [findingContacts, setFindingContacts] = useState(false);
@@ -124,7 +124,8 @@ export default function AccountDrawer() {
   const [startTime, setStartTime] = useState<string>(toHHMM(new Date()));
 
   const eventTypeOptions = [...BUILT_IN_ACTIVITY_TYPES, ...customActivityTypes];
-  const assignedToOptions = REP_ASSIGNEES;
+  const { data: members = [] } = useMembers();
+  const assignedToOptions = members.map((m) => m.display_name || m.email);
   const queryClient = useQueryClient();
   const { user, profile } = useAuthContext();
   const isPreview = !!selectedAccount?.isAroundMePreview;
@@ -283,7 +284,7 @@ export default function AccountDrawer() {
     setVisitNotes('');
 
     setEventType('');
-    setAssignedTo(REP_ASSIGNEES[0]);
+    setAssignedTo('');
     setQuoteServices([]);
     setQuotePrices({});
 

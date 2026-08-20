@@ -26,6 +26,7 @@ export interface Database {
           display_name: string | null;
           avatar_url: string | null;
           advanced_filters: Json;
+          role: string;
           created_at: string;
           updated_at: string;
         };
@@ -279,7 +280,19 @@ export interface Database {
       };
     };
     Views: Record<string, never>;
-    Functions: Record<string, never>;
+    Functions: {
+      list_members: {
+        Args: Record<PropertyKey, never>;
+        Returns: {
+          user_id: string;
+          email: string;
+          display_name: string | null;
+          role: string;
+          status: string;
+          created_at: string;
+        }[];
+      };
+    };
     Enums: Record<string, never>;
     CompositeTypes: Record<string, never>;
   };
