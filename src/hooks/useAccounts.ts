@@ -103,9 +103,11 @@ const transformDbAccount = (row: AccountRow): Account => ({
   hubspotCompanyId: row.hubspot_company_id || undefined,
   hubspotContactId: row.hubspot_contact_id || undefined,
 
-  qbRawRows: Array.isArray(row.qb_raw_rows)
-    ? (row.qb_raw_rows as unknown as Record<string, string>[])
-    : undefined,
+  // qb_raw_rows deliberately excluded from ACCOUNT_COLUMNS below — it's not
+  // rendered anywhere in the app today and averages ~1KB/row (up to 12KB),
+  // so including it in the bulk list fetch was pure wasted payload. Use
+  // useAccountRawRows(accountId) if it's ever needed for a single account.
+  qbRawRows: undefined,
 });
 
 const ACCOUNT_COLUMNS =
@@ -113,7 +115,7 @@ const ACCOUNT_COLUMNS =
   'billing_address,billing_city,billing_state,billing_zip,route_address,route_city,route_state,route_zip,' +
   'latitude,longitude,salutation,first_name,middle_initial,last_name,primary_contact,secondary_contact,' +
   'job_title,main_phone,alt_phone,fax,main_email,linkedin_url,website,visit_count,last_visit_date,' +
-  'next_follow_up_date,last_contacted_at,last_contacted_source,hubspot_company_id,hubspot_contact_id,qb_raw_rows';
+  'next_follow_up_date,last_contacted_at,last_contacted_source,hubspot_company_id,hubspot_contact_id';
 
 export function useAccounts() {
   return useQuery({
@@ -123,32 +125,59 @@ export function useAccounts() {
     staleTime: 60_000,
     refetchOnWindowFocus: false,
     queryFn: async (): Promise<Account[]> => {
-      const allAccounts: Account[] = [];
       const pageSize = 1000;
-      let offset = 0;
-      let hasMore = true;
 
-      // Fetch in batches to bypass the 1000 row limit
-      while (hasMore && offset < 50000) {
-        const { data, error } = await supabase
-          .from('accounts')
-          .select(ACCOUNT_COLUMNS)
-          .order('created_at', { ascending: false })
-          .range(offset, offset + pageSize - 1);
+      // Get the exact count first (a cheap head request, no rows returned)
+      // so every page can be requested in parallel instead of one at a time
+      // — the old sequential while-loop meant page 2 couldn't even start
+      // until page 1's full round trip had already finished.
+      const { count, error: countError } = await supabase
+        .from('accounts')
+        .select('id', { count: 'exact', head: true });
+      if (countError) throw countError;
 
+      const total = count ?? 0;
+      const pageCount = Math.min(Math.ceil(total / pageSize), 50);
+      const pages = await Promise.all(
+        Array.from({ length: pageCount }, (_, i) => {
+          const offset = i * pageSize;
+          return supabase
+            .from('accounts')
+            .select(ACCOUNT_COLUMNS)
+            .order('created_at', { ascending: false })
+            .range(offset, offset + pageSize - 1);
+        }),
+      );
+
+      const allAccounts: Account[] = [];
+      for (const { data, error } of pages) {
         if (error) throw error;
-
-        const transformedAccounts = ((data || []) as unknown as AccountRow[]).map(transformDbAccount);
-        allAccounts.push(...transformedAccounts);
-
-        // If we got fewer records than page size, we've reached the end
-        hasMore = data?.length === pageSize;
-        offset += pageSize;
+        allAccounts.push(...((data || []) as unknown as AccountRow[]).map(transformDbAccount));
       }
 
       console.log(`[useAccounts] Fetched ${allAccounts.length} total accounts`);
       return allAccounts;
     },
+  });
+}
+
+// Lazy, single-account fetch of the raw QuickBooks import rows — kept out of
+// the bulk accounts list (see ACCOUNT_COLUMNS above) since nothing renders
+// it today; call this if/when a "view raw import data" UI is ever added.
+export function useAccountRawRows(accountId: string | undefined) {
+  return useQuery<Record<string, string>[]>({
+    queryKey: ['account_raw_rows', accountId],
+    queryFn: async () => {
+      if (!accountId) return [];
+      const { data, error } = await supabase
+        .from('accounts')
+        .select('qb_raw_rows')
+        .eq('id', accountId)
+        .single();
+      if (error) throw error;
+      return Array.isArray((data as any)?.qb_raw_rows) ? (data as any).qb_raw_rows : [];
+    },
+    enabled: !!accountId,
   });
 }
 
