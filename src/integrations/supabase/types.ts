@@ -278,6 +278,94 @@ export interface Database {
         Update: Partial<Database['public']['Tables']['clay_sync_log']['Row']>;
         Relationships: [];
       };
+      workflows: {
+        Row: {
+          id: string;
+          name: string;
+          status: string;
+          trigger_type: string;
+          trigger_config: Json;
+          conditions: Json;
+          steps: Json;
+          created_by: string | null;
+          created_at: string;
+          updated_at: string;
+        };
+        Insert: Partial<Database['public']['Tables']['workflows']['Row']> & { name: string };
+        Update: Partial<Database['public']['Tables']['workflows']['Row']>;
+        Relationships: [];
+      };
+      workflow_runs: {
+        Row: {
+          id: string;
+          workflow_id: string;
+          account_id: string;
+          step_index: number;
+          status: string;
+          next_run_at: string;
+          trigger_payload: Json;
+          created_at: string;
+          updated_at: string;
+        };
+        Insert: Partial<Database['public']['Tables']['workflow_runs']['Row']> & { workflow_id: string; account_id: string };
+        Update: Partial<Database['public']['Tables']['workflow_runs']['Row']>;
+        Relationships: [];
+      };
+      tasks: {
+        Row: {
+          id: string;
+          account_id: string;
+          workflow_id: string | null;
+          workflow_run_id: string | null;
+          title: string;
+          subtitle: string | null;
+          owner: string | null;
+          due_at: string;
+          status: string;
+          completed_at: string | null;
+          created_at: string;
+        };
+        Insert: Partial<Database['public']['Tables']['tasks']['Row']> & { account_id: string; title: string };
+        Update: Partial<Database['public']['Tables']['tasks']['Row']>;
+        Relationships: [];
+      };
+      workflow_trigger_events: {
+        Row: {
+          id: string;
+          trigger_type: string;
+          account_id: string;
+          payload: Json;
+          processed: boolean;
+          created_at: string;
+        };
+        Insert: Partial<Database['public']['Tables']['workflow_trigger_events']['Row']> & { trigger_type: string; account_id: string };
+        Update: Partial<Database['public']['Tables']['workflow_trigger_events']['Row']>;
+        Relationships: [];
+      };
+      workflow_alert_log: {
+        Row: {
+          id: string;
+          workflow_run_id: string | null;
+          channel: string;
+          message: string;
+          sent: boolean;
+          created_at: string;
+        };
+        Insert: Partial<Database['public']['Tables']['workflow_alert_log']['Row']> & { channel: string; message: string };
+        Update: Partial<Database['public']['Tables']['workflow_alert_log']['Row']>;
+        Relationships: [];
+      };
+      integration_connections: {
+        Row: {
+          provider: string;
+          config: Json;
+          connected_by: string | null;
+          created_at: string;
+        };
+        Insert: Partial<Database['public']['Tables']['integration_connections']['Row']> & { provider: string };
+        Update: Partial<Database['public']['Tables']['integration_connections']['Row']>;
+        Relationships: [];
+      };
     };
     Views: Record<string, never>;
     Functions: {

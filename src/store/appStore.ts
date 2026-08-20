@@ -93,8 +93,8 @@ interface AppState {
   // UI state
   isSidebarOpen: boolean;
   isDrawerOpen: boolean;
-  activeTab: 'map' | 'chat' | 'prospect' | 'contacts';
-  setActiveTab: (tab: 'map' | 'chat' | 'prospect' | 'contacts') => void;
+  activeTab: 'map' | 'chat' | 'prospect' | 'contacts' | 'workflows' | 'tasks';
+  setActiveTab: (tab: 'map' | 'chat' | 'prospect' | 'contacts' | 'workflows' | 'tasks') => void;
 
   // Map state
   mapCenter: [number, number];

@@ -66,27 +66,9 @@ import type { ProspectContact } from '@/hooks/useProspectContacts';
 import { format } from 'date-fns';
 import { useMembers } from '@/hooks/useMembers';
 import { useCustomActivityTypes, useCreateActivityType } from '@/hooks/useTags';
+import { BUILT_IN_ACTIVITY_TYPES } from '@/types/workflow';
 import EditContactDialog from '@/components/EditContactDialog';
 import AccountTagsEditor from '@/components/AccountTagsEditor';
-
-// Built-in activity types, shared with custom ones reps add on top (see
-// activity_types table via useTags.ts's useCustomActivityTypes).
-const BUILT_IN_ACTIVITY_TYPES = [
-  'Quote Created',
-  'Call',
-  'Drop By',
-  'Follow up',
-  'Presentation',
-  'Setup',
-  'First Post',
-  'Training',
-  'Onboarding',
-  'Direct Hire',
-  'Retention',
-  'Expansion',
-  'Reactivation',
-  'Freshdesk Ticket',
-];
 
 // QB accounts often only have company + free-text contact fields (no named
 // person) — ~49% of source rows have no first/last name at all. Build a

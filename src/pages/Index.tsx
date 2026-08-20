@@ -10,6 +10,8 @@ import MapHeader from '@/components/MapHeader';
 import ChatView from '@/components/ChatView';
 import ProspectView from '@/components/ProspectView';
 import ContactsView from '@/components/ContactsView';
+import WorkflowsView from '@/components/WorkflowsView';
+import TasksView from '@/components/TasksView';
 import RouteOverviewDialog from '@/components/RouteOverviewDialog';
 import { Button } from '@/components/ui/button';
 import { cn } from '@/lib/utils';
@@ -92,6 +94,20 @@ const Index = () => {
         {activeTab === 'contacts' && (
           <div className="h-full">
             <ContactsView />
+          </div>
+        )}
+
+        {/* Workflows tab */}
+        {activeTab === 'workflows' && (
+          <div className="h-full">
+            <WorkflowsView />
+          </div>
+        )}
+
+        {/* Tasks tab */}
+        {activeTab === 'tasks' && (
+          <div className="h-full">
+            <TasksView />
           </div>
         )}
       </div>

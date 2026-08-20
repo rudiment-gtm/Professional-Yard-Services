@@ -12,6 +12,8 @@ import {
   Radar,
   Users,
   Settings as SettingsIcon,
+  Workflow as WorkflowIcon,
+  ListChecks,
 } from 'lucide-react';
 import { useState } from 'react';
 import AroundMeDialog from '@/components/AroundMeDialog';
@@ -27,6 +29,8 @@ const NAV_ITEMS = [
   { tab: 'map', label: 'Map', icon: MapIcon },
   { tab: 'prospect', label: 'Prospect', icon: Radar },
   { tab: 'contacts', label: 'Contacts', icon: Users },
+  { tab: 'workflows', label: 'Workflows', icon: WorkflowIcon },
+  { tab: 'tasks', label: 'Tasks', icon: ListChecks },
 ] as const;
 
 // Display-only — no real usage tracking wired up yet. Swap for a real query

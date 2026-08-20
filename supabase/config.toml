@@ -32,3 +32,8 @@ verify_jwt = false
 # service-to-service) — no end-user session to verify a JWT against.
 [functions.notify-n8n-status-canceled]
 verify_jwt = false
+
+# Called only by pg_cron on a schedule (process-workflows job) — no
+# end-user session to verify a JWT against.
+[functions.process-workflows]
+verify_jwt = false
