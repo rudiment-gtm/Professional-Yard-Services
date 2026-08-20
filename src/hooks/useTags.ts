@@ -22,6 +22,29 @@ export function useTags() {
   });
 }
 
+// Bulk account_id -> tag_id[] map, fetched and applied to the store
+// independently of useAccounts() — this must never block or slow down the
+// core account list loading, so it runs as its own query and patches tags
+// onto whatever accounts are already in the store once it resolves.
+export function useAccountTagsBulk() {
+  return useQuery<Map<string, string[]>>({
+    queryKey: ['account_tags_bulk'],
+    queryFn: async () => {
+      const { data, error } = await supabase.from('account_tags').select('account_id, tag_id');
+      if (error) throw error;
+      const tagsByAccount = new Map<string, string[]>();
+      for (const row of data ?? []) {
+        const list = tagsByAccount.get(row.account_id) ?? [];
+        list.push(row.tag_id);
+        tagsByAccount.set(row.account_id, list);
+      }
+      return tagsByAccount;
+    },
+    staleTime: 60_000,
+    refetchOnWindowFocus: false,
+  });
+}
+
 export function useCreateTag() {
   const queryClient = useQueryClient();
   return useMutation({

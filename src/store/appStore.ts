@@ -157,6 +157,7 @@ interface AppState {
   setMapView: (center: [number, number], zoom: number) => void;
   updateAccountStatus: (accountId: string, status: AccountStatus) => void;
   updateAccountFields: (accountId: string, patch: Partial<Account>) => void;
+  setAccountTagsBulk: (tagsByAccount: Map<string, string[]>) => void;
   logVisit: (accountId: string, notes?: string) => void;
   setAccounts: (accounts: Account[]) => void;
   setUserLocation: (location: [number, number] | null) => void;
@@ -444,6 +445,16 @@ export const useAppStore = create<AppState>((set, get) => ({
     selectedAccount: state.selectedAccount?.id === accountId
       ? { ...state.selectedAccount, ...patch }
       : state.selectedAccount,
+  })),
+
+  // Applies a bulk account_id -> tag_id[] map (from useAccountTagsBulk) onto
+  // whichever accounts are already loaded — a separate step from the main
+  // account fetch so a slow/failed tags fetch never delays the account list.
+  setAccountTagsBulk: (tagsByAccount) => set((state) => ({
+    accounts: state.accounts.map(account => ({
+      ...account,
+      tags: tagsByAccount.get(account.id) ?? account.tags,
+    })),
   })),
 
   // NOTE: Optimistic local-only update. Source of truth is the DB; values

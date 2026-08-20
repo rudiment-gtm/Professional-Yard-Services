@@ -1,6 +1,7 @@
 import { useEffect } from 'react';
 import { useAppStore } from '@/store/appStore';
 import { useAccounts } from '@/hooks/useAccounts';
+import { useAccountTagsBulk } from '@/hooks/useTags';
 import FilterSidebar from '@/components/FilterSidebar';
 import MapToolbar from '@/components/MapToolbar';
 import AccountMap from '@/components/AccountMap';
@@ -22,14 +23,15 @@ import { toast } from 'sonner';
 
 const Index = () => {
   const {
-    isSidebarOpen, setAccounts, accounts,
+    isSidebarOpen, setAccounts, setAccountTagsBulk, accounts,
     isRouteModeActive, toggleRouteMode,
     routeStops, clearRouteSelection,
     userLocation, activeTab
   } = useAppStore();
   const { data: dbAccounts, isLoading } = useAccounts();
+  const { data: accountTagsMap } = useAccountTagsBulk();
   const isMobile = useIsMobile();
-  
+
   // Sync database accounts to store, fallback to mock data if empty
   useEffect(() => {
     console.log('[Index] DB accounts:', dbAccounts?.length, 'Store accounts:', accounts.length, 'Loading:', isLoading);
@@ -37,6 +39,14 @@ const Index = () => {
       setAccounts(dbAccounts);
     }
   }, [dbAccounts, isLoading, setAccounts]);
+
+  // Tags are fetched independently of the account list — this patches them
+  // in whenever they arrive, without ever gating the account fetch above.
+  useEffect(() => {
+    if (accountTagsMap) {
+      setAccountTagsBulk(accountTagsMap);
+    }
+  }, [accountTagsMap, setAccountTagsBulk]);
 
   const openGoogleMapsNavigation = () => {
     const { truncated } = openGoogleMapsRoute(routeStops, accounts, userLocation);

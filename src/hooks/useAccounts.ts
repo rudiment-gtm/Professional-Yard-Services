@@ -146,31 +146,6 @@ export function useAccounts() {
         offset += pageSize;
       }
 
-      // Bulk-join tags onto each account (a small table — every attach/detach
-      // is one row, not one per account) so the map toolbar can filter by tag
-      // client-side the same way it already does for status/services.
-      // Best-effort: a failure here (e.g. tags table not queryable yet) must
-      // never take down the whole account list, which is why it's wrapped
-      // separately from the accounts fetch above.
-      try {
-        const { data: accountTagRows, error: tagsError } = await supabase
-          .from('account_tags')
-          .select('account_id, tag_id');
-        if (tagsError) throw tagsError;
-
-        const tagsByAccount = new Map<string, string[]>();
-        for (const row of accountTagRows ?? []) {
-          const list = tagsByAccount.get(row.account_id) ?? [];
-          list.push(row.tag_id);
-          tagsByAccount.set(row.account_id, list);
-        }
-        for (const account of allAccounts) {
-          account.tags = tagsByAccount.get(account.id) ?? [];
-        }
-      } catch (err) {
-        console.error('[useAccounts] tags join failed, continuing without tags', err);
-      }
-
       console.log(`[useAccounts] Fetched ${allAccounts.length} total accounts`);
       return allAccounts;
     },
