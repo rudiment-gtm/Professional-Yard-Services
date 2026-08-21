@@ -89,6 +89,12 @@ export default function AccountDrawer() {
   const [assignedTo, setAssignedTo] = useState<string>('');
   const [quoteServices, setQuoteServices] = useState<ServiceType[]>([]);
   const [quotePrices, setQuotePrices] = useState<Record<string, string>>({});
+  // Mowing's price isn't entered manually — n8n calculates it from a
+  // tiered SQFT rate x difficulty factor (Maintenance Bidding sheet), so
+  // these two raw inputs get collected here and passed through the
+  // existing notify-n8n-quote-created webhook instead of a manual price.
+  const [mowingSqft, setMowingSqft] = useState('');
+  const [mowingDifficulty, setMowingDifficulty] = useState<'easy' | 'standard' | 'hard' | ''>('');
   const [findingContacts, setFindingContacts] = useState(false);
   const [revealingField, setRevealingField] = useState<Record<string, 'email' | 'phone'>>({});
   const [isCreatingActivityType, setIsCreatingActivityType] = useState(false);
@@ -149,6 +155,8 @@ export default function AccountDrawer() {
         }
       }
       setQuotePrices(priceStrings);
+      if (mostRecent.mowing_sqft != null) setMowingSqft(String(mostRecent.mowing_sqft));
+      if (mostRecent.mowing_difficulty) setMowingDifficulty(mostRecent.mowing_difficulty);
       if (!visitNotes && mostRecent.notes) setVisitNotes(mostRecent.notes);
       toast.info(`Pre-filled from ${mostRecent.quote_number ?? 'the last quote'} — review before logging.`);
     }
@@ -168,6 +176,8 @@ export default function AccountDrawer() {
   const isQuoteCreated = eventType === 'Quote Created';
   const servicesMissingPrice = isQuoteCreated
     ? quoteServices.filter((s) => {
+        // Mowing is priced by n8n from sqft + difficulty, not a manual price.
+        if (s === 'mowing') return false;
         const n = parseFloat(quotePrices[s] ?? '');
         return !quotePrices[s] || Number.isNaN(n) || n <= 0;
       })
@@ -183,6 +193,11 @@ export default function AccountDrawer() {
   if (isQuoteCreated && quoteServices.length === 0) missingFields.push('Service(s) Quoted');
   if (isQuoteCreated && servicesMissingPrice.length > 0) {
     missingFields.push(`Price (${servicesMissingPrice.map((s) => serviceConfig[s].label).join(', ')})`);
+  }
+  if (isQuoteCreated && quoteServices.includes('mowing')) {
+    const sqftNum = parseFloat(mowingSqft);
+    if (!mowingSqft || Number.isNaN(sqftNum) || sqftNum <= 0) missingFields.push('Mowing SQFT');
+    if (!mowingDifficulty) missingFields.push('Mowing Difficulty');
   }
   const canLog = missingFields.length === 0;
   const disabledReason = !canLog ? `Please fill: ${missingFields.join(', ')}.` : '';
@@ -257,10 +272,14 @@ export default function AccountDrawer() {
     const assignee = assignedTo;
     const evIsQuoteCreated = isQuoteCreated;
     const evQuoteServices = quoteServices;
+    // Mowing is priced by n8n from sqft + difficulty, not a manual price,
+    // so it never gets a line-item entry here.
     const evQuoteLineItems = evIsQuoteCreated
-      ? Object.fromEntries(quoteServices.map((s) => [s, parseFloat(quotePrices[s])]))
+      ? Object.fromEntries(quoteServices.filter((s) => s !== 'mowing').map((s) => [s, parseFloat(quotePrices[s])]))
       : null;
     const evQuotePrice = quoteTotalPrice;
+    const evMowingSqft = evIsQuoteCreated && quoteServices.includes('mowing') ? parseFloat(mowingSqft) : null;
+    const evMowingDifficulty = evIsQuoteCreated && quoteServices.includes('mowing') ? mowingDifficulty : null;
     const startIso = startAt.toISOString();
     const endIso = endAt.toISOString();
     setVisitNotes('');
@@ -269,6 +288,8 @@ export default function AccountDrawer() {
     setAssignedTo('');
     setQuoteServices([]);
     setQuotePrices({});
+    setMowingSqft('');
+    setMowingDifficulty('');
 
     try {
       const { data: evData, error } = await supabase
@@ -282,7 +303,13 @@ export default function AccountDrawer() {
           notes: noteText || null,
           author_user_id: user?.id ?? '00000000-0000-0000-0000-000000000000',
           author_name: user?.email ?? 'Unknown',
-          ...(evIsQuoteCreated ? { quote_services: evQuoteServices, quote_price_usd: evQuotePrice, quote_line_items: evQuoteLineItems } : {}),
+          ...(evIsQuoteCreated ? {
+            quote_services: evQuoteServices,
+            quote_price_usd: evQuotePrice,
+            quote_line_items: evQuoteLineItems,
+            mowing_sqft: evMowingSqft,
+            mowing_difficulty: evMowingDifficulty || null,
+          } : {}),
         })
         .select()
         .single();
@@ -918,13 +945,51 @@ export default function AccountDrawer() {
                     </div>
                   </div>
 
-                  {quoteServices.length > 0 && (
+                  {quoteServices.includes('mowing') && (
+                    <div className="space-y-2 pb-[15px]">
+                      <h3 className="text-sm font-semibold text-muted-foreground uppercase tracking-wider">
+                        <span className="text-destructive">*</span> Mowing — SQFT &amp; Difficulty
+                      </h3>
+                      <p className="text-xs text-muted-foreground">
+                        Priced automatically from the tiered SQFT rate and difficulty factor — no manual price needed.
+                      </p>
+                      <div className="grid grid-cols-2 gap-2">
+                        <Input
+                          type="number"
+                          min="0"
+                          step="1"
+                          placeholder="SQFT"
+                          value={mowingSqft}
+                          onChange={(e) => setMowingSqft(e.target.value)}
+                        />
+                        <div className="flex items-center gap-1.5">
+                          {(['easy', 'standard', 'hard'] as const).map((d) => (
+                            <button
+                              type="button"
+                              key={d}
+                              onClick={() => setMowingDifficulty(d)}
+                              className={cn(
+                                'flex-1 px-2 py-1.5 rounded-full text-xs font-medium border capitalize transition-colors',
+                                mowingDifficulty === d
+                                  ? 'bg-primary/15 text-primary border-transparent'
+                                  : 'border-border text-muted-foreground',
+                              )}
+                            >
+                              {d}
+                            </button>
+                          ))}
+                        </div>
+                      </div>
+                    </div>
+                  )}
+
+                  {quoteServices.filter((s) => s !== 'mowing').length > 0 && (
                     <div className="space-y-2 pb-[15px]">
                       <h3 className="text-sm font-semibold text-muted-foreground uppercase tracking-wider">
                         <span className="text-destructive">*</span> Price per Service (USD)
                       </h3>
                       <div className="space-y-2">
-                        {quoteServices.map((s) => (
+                        {quoteServices.filter((s) => s !== 'mowing').map((s) => (
                           <div key={s} className="flex items-center gap-2">
                             <span
                               className="text-sm flex-shrink-0 w-32 truncate"
@@ -942,7 +1007,7 @@ export default function AccountDrawer() {
                             />
                           </div>
                         ))}
-                        {quoteServices.length > 1 && (
+                        {quoteServices.filter((s) => s !== 'mowing').length > 1 && (
                           <p className="text-xs text-muted-foreground text-right pt-0.5">
                             Total: ${quoteTotalPrice.toLocaleString()}
                           </p>

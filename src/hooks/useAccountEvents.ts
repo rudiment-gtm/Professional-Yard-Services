@@ -19,6 +19,11 @@ export interface AccountEvent {
   quote_line_items: Record<string, number> | null;
   quote_number: string | null;
   quote_doc_url: string | null;
+  // Raw inputs for mowing's tiered-SQFT-rate x difficulty-factor pricing —
+  // n8n calculates the actual price from these, this app just collects and
+  // passes them through.
+  mowing_sqft: number | null;
+  mowing_difficulty: 'easy' | 'standard' | 'hard' | null;
 }
 
 export function useAccountEvents(accountId: string | undefined) {

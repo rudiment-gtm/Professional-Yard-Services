@@ -93,6 +93,11 @@ Deno.serve(async (req) => {
         price_usd: price,
       })),
       price_usd: event.quote_price_usd,
+      // Mowing has no manual price above — its cost is a tiered SQFT rate
+      // x a difficulty factor (Maintenance Bidding sheet), calculated here
+      // in n8n from these two raw inputs, not by the app.
+      mowing_sqft: event.mowing_sqft ?? null,
+      mowing_difficulty: event.mowing_difficulty ?? null,
       account,
       account_event: event,
     };
