@@ -54,7 +54,12 @@ function evaluateCondition(account: Account, cond: FilterCondition): boolean {
     }
     case 'strings': {
       if (value.values.length === 0) return true;
-      const lv = normStr(v as string);
+      // City options are keyed "city|state" (see ValueInput's
+      // CityMultiSelect) so same-named cities in different states don't
+      // collide — match on that same compound key here, not city alone.
+      const lv = cond.field === 'city'
+        ? normStr(`${account.routeCity ?? ''}|${account.routeState ?? ''}`)
+        : normStr(v as string);
       const match = value.values.map(normStr).includes(lv);
       return operator === 'not_in' ? !match : match;
     }

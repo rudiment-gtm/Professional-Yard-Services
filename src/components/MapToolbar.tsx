@@ -30,7 +30,12 @@ function describeCondition(cond: FilterCondition, tagsById: Map<string, Tag>): s
       valueLabel = value.values.map((id) => tagsById.get(id)?.label ?? id).join(', ');
       break;
     case 'strings':
-      valueLabel = value.values.join(', ');
+      // City values are keyed "city|state" (see ValueInput's
+      // CityMultiSelect) so same-named cities in different states don't
+      // collide — display it as "City, State" instead of the raw key.
+      valueLabel = cond.field === 'city'
+        ? value.values.map((v) => v.split('|').filter(Boolean).join(', ')).join('; ')
+        : value.values.join(', ');
       break;
     case 'text':
       valueLabel = value.value;

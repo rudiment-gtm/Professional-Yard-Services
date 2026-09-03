@@ -1,4 +1,4 @@
-import { useState, KeyboardEvent } from 'react';
+import { useState, useMemo, KeyboardEvent } from 'react';
 import { Input } from '@/components/ui/input';
 import { Popover, PopoverContent, PopoverTrigger } from '@/components/ui/popover';
 import { Checkbox } from '@/components/ui/checkbox';
@@ -20,7 +20,14 @@ import {
   FULL_SERVICE_CONFIG,
 } from '@/types/account';
 import { useTags } from '@/hooks/useTags';
+import { useAppStore } from '@/store/appStore';
 import { cn } from '@/lib/utils';
+
+// City/state pairs sharing a city name (e.g. Houston, TX vs Houston, PA) are
+// different places — a plain city-name match pulls in both. This keys each
+// picker option (and the stored filter value) by "city|state" instead, so
+// picking one only ever matches that specific city.
+const cityStateKey = (city: string, state: string) => `${city}|${state}`;
 
 interface Props {
   field: FilterField;
@@ -142,6 +149,75 @@ function TagsMultiSelect({ selected, onChange }: { selected: string[]; onChange:
   );
 }
 
+function CityMultiSelect({ selected, onChange }: { selected: string[]; onChange: (v: string[]) => void }) {
+  const accounts = useAppStore((s) => s.accounts);
+  const options = useMemo(() => {
+    const byKey = new Map<string, { city: string; state: string; key: string }>();
+    accounts.forEach((a) => {
+      const city = a.routeCity?.trim();
+      if (!city) return;
+      const state = a.routeState?.trim() ?? '';
+      const key = cityStateKey(city, state);
+      if (!byKey.has(key)) byKey.set(key, { city, state, key });
+    });
+    return Array.from(byKey.values()).sort(
+      (a, b) => a.city.localeCompare(b.city) || a.state.localeCompare(b.state),
+    );
+  }, [accounts]);
+  const labelFor = (key: string) => {
+    const opt = options.find((o) => o.key === key);
+    if (opt) return opt.state ? `${opt.city}, ${opt.state}` : opt.city;
+    const [city] = key.split('|');
+    return city;
+  };
+
+  const [open, setOpen] = useState(false);
+  const toggle = (key: string) => {
+    onChange(selected.includes(key) ? selected.filter((x) => x !== key) : [...selected, key]);
+  };
+
+  return (
+    <Popover open={open} onOpenChange={setOpen}>
+      <PopoverTrigger asChild>
+        <button
+          className={cn(
+            'w-full h-auto min-h-8 px-2 py-1 rounded-md border border-sidebar-border bg-sidebar text-left text-xs flex items-center justify-between gap-1',
+          )}
+        >
+          {selected.length === 0 ? (
+            <span className="text-sidebar-muted">Select values…</span>
+          ) : (
+            <div className="flex flex-wrap gap-1">
+              {selected.map((k) => (
+                <Badge key={k} variant="secondary" className="text-[10px] px-1.5 py-0">
+                  {labelFor(k)}
+                </Badge>
+              ))}
+            </div>
+          )}
+          <ChevronDown className="w-3 h-3 text-sidebar-muted shrink-0" />
+        </button>
+      </PopoverTrigger>
+      <PopoverContent className="w-56 p-1.5" align="start">
+        <div className="space-y-0.5 max-h-64 overflow-y-auto">
+          {options.length === 0 && (
+            <p className="px-2 py-1.5 text-xs text-sidebar-muted">No cities yet.</p>
+          )}
+          {options.map((o) => (
+            <label
+              key={o.key}
+              className="flex items-center gap-2 px-2 py-1.5 rounded hover:bg-accent cursor-pointer text-sm"
+            >
+              <Checkbox checked={selected.includes(o.key)} onCheckedChange={() => toggle(o.key)} />
+              <span>{o.state ? `${o.city}, ${o.state}` : o.city}</span>
+            </label>
+          ))}
+        </div>
+      </PopoverContent>
+    </Popover>
+  );
+}
+
 function TagInput({ values, onChange }: { values: string[]; onChange: (v: string[]) => void }) {
   const [draft, setDraft] = useState('');
   const commit = () => {
@@ -206,6 +282,17 @@ export default function ValueInput({ field, operator, value, onChange }: Props) 
 
   if (meta.type === 'enum-tags' && value.kind === 'tags') {
     return <TagsMultiSelect selected={value.values} onChange={(v) => onChange({ kind: 'tags', values: v })} />;
+  }
+
+  // City — picker keyed by city+state so same-named cities in different
+  // states (e.g. Houston, TX vs Houston, PA) don't collide into one option.
+  if (field === 'city' && value.kind === 'strings') {
+    return (
+      <CityMultiSelect
+        selected={value.values}
+        onChange={(v) => onChange({ kind: 'strings', values: v })}
+      />
+    );
   }
 
   // Text fields
